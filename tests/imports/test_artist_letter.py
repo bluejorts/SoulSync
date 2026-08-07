@@ -83,7 +83,6 @@ def test_all_call_sites_use_the_shared_helper():
     ws_src = (_ROOT / 'web_server.py').read_text(encoding='utf-8')
     assert paths_src.count('artist_letter(clean_context.get("artist", "U"))') == 2
     assert ws_src.count("_shared_artist_letter(clean_context.get('artist', 'U'))") == 2
-    assert "_shared_artist_letter(safe_artist)" in ws_src
     # the raw extraction may never reappear at a call site
     assert "[0].upper()" not in paths_src.replace('literal = (artist or "U")[0].upper()', '')
     for needle in ("(clean_context.get('artist', 'U') or 'U')[0].upper()",

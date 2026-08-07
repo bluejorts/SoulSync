@@ -122,7 +122,7 @@ def test_dashboard_tour_matches_the_current_dashboard():
                    '#wishlist-button', '.service-status-grid', '.stats-grid-dashboard',
                    '#library-status-card', '#sync-history-cards', '.dash-card--quick-actions',
                    '#dashboard-activity-feed', '#enrichment-pills-section',
-                   '.side-toggle', '#profile-indicator', '.version-button'):
+                   '#profile-indicator', '.version-button'):
         assert anchor in dash, f'dashboard tour lost its {anchor} step'
     # the pre-redesign tool cards are gone from the dashboard tour
     for stale in ('#db-updater-card', '#metadata-updater-card', '#duplicate-cleaner-card',

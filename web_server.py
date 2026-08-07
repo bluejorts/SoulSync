@@ -479,26 +479,6 @@ socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=_socketio_
 _log_socketio_startup_status(_socketio_cors_origins, logger)
 _socketio_rejection_logger = _SocketIORejectionLogger(logger)
 set_activity_toast_emitter(socketio.emit)
-# Live overlay-apply progress → 'overlay:progress' socket events (bell + panel).
-from core.video.overlays.service import set_overlay_progress_emitter as _set_overlay_emit
-_set_overlay_emit(socketio.emit)
-# Live collection-cleanup progress → 'collections:cleanup' socket events (studio).
-from core.video.collections.server_cleanup import set_cleanup_progress_emitter as _set_cleanup_emit
-_set_cleanup_emit(socketio.emit)
-# Live collection-sync progress → 'collections:sync' socket events (bell + studio).
-from core.video.collections.sync_job import set_sync_progress_emitter as _set_colsync_emit
-_set_colsync_emit(socketio.emit)
-# Live artwork-refresh progress → 'collections:artwork' socket events (bell + studio).
-from core.video.collections.poster_gen import set_artwork_progress_emitter as _set_colart_emit
-_set_colart_emit(socketio.emit)
-# Live bulk-metadata progress → 'video:bulk' socket events (bell + library bar).
-from core.video.bulk_ops import set_bulk_progress_emitter as _set_bulk_emit
-_set_bulk_emit(socketio.emit)
-# Video Library Maintenance (jobs & findings): live 'video:repair:progress'
-# socket events + the scheduler thread (force-runs work even when disabled).
-from core.video.repair.worker import get_video_repair_worker as _get_video_repair
-_get_video_repair().set_emitter(socketio.emit)
-_get_video_repair().start()
 
 # Plex PIN auth requests stored in memory for polling
 _plex_pin_requests = {}
@@ -634,12 +614,11 @@ def _set_profile_context():
     pid = session.get('profile_id', 1)
 
     # Validate session profile still exists (handles deleted profiles), and stash
-    # download permission on g so isolated blueprints (video) can gate without a
-    # music-DB read. Admin (1) is always allowed.
+    # download permission on g. Admin (1) is always allowed.
     g.can_download = True
-    g.profile_name = "Admin"   # display name for isolated blueprints (video issues reporter)
+    g.profile_name = "Admin"
     g.is_admin = True          # profile 1 is always admin; others per their is_admin flag
-    g.allowed_sides = 'both'   # per-profile side access (music|video|both); admins always both
+    g.allowed_sides = 'both'   # legacy per-profile side access column; always music now
     if pid != 1 and 'profile_id' in session:
         g.is_admin = False
         try:
@@ -652,8 +631,7 @@ def _set_profile_context():
             g.can_download = bool((profile or {}).get('can_download', True))
             g.profile_name = (profile or {}).get('name') or ("Profile %s" % pid)
             g.is_admin = bool((profile or {}).get('is_admin', False))
-            # get_profile resolves defaults (non-admin NULL → 'music'), so the
-            # video blueprint can gate off g without a second music-DB read.
+            # get_profile resolves defaults (non-admin NULL → 'music').
             g.allowed_sides = (profile or {}).get('allowed_sides') or 'music'
         except Exception as e:
             logger.debug("profile session validate: %s", e)
@@ -905,17 +883,6 @@ VALID_PAGE_IDS = {
     'help',
     'hydrabase',
     'issues',
-    # Video side — per-profile page toggles (admin-only surfaces are gated separately,
-    # not via allowed_pages: overlay studio, video-import, video-settings, video-automations).
-    'video-dashboard',
-    'video-search',
-    'video-discover',
-    'video-library',
-    'video-watchlist',
-    'video-wishlist',
-    'video-downloads',
-    'video-calendar',
-    'video-tools',
 }
 
 def check_download_permission():
@@ -1466,28 +1433,6 @@ def _register_automation_handlers():
         build_personalized_manager=_build_personalized_manager,
     )
     _register_extracted_handlers(_automation_deps)
-
-    # Bridge the isolated video download monitor's batch-complete signal into the
-    # automation engine (core/video can't import the engine). Mirrors how the music
-    # web_scan_manager forwards library_scan_completed. ONE forwarder relays EVERY
-    # published video event (batch complete, download completed/failed, repair
-    # findings, wishlist/watchlist changes, ...) to its same-named event trigger.
-    if automation_engine is not None:
-        try:
-            from core.video.download_events import register_event_forwarder
-            register_event_forwarder(
-                lambda etype, data: automation_engine.emit(etype, data or {}))
-        except Exception:
-            logger.exception("Could not wire video events -> automation engine")
-    # Notifications (arr-parity P11): a second forwarder fans the same events
-    # out to configured Discord/webhook/Telegram connections. Independent of
-    # the engine — notify still works if automations are off.
-    try:
-        from core.video.download_events import register_event_forwarder as _reg_fw
-        from core.video.notifications import handle_event as _notify_handle
-        _reg_fw(_notify_handle)
-    except Exception:
-        logger.exception("Could not wire video events -> notifications")
 
     logger.info("Automation action handlers registered")
 
@@ -3209,9 +3154,9 @@ def get_system_stats():
 
 @app.route('/api/server-activity')
 def get_server_activity():
-    """Live Tautulli-style activity — every active Plex stream (music + video):
-    who's playing what, direct play vs transcode, bandwidth, progress. App-wide;
-    never raises (an unconfigured/down server is a normal state the UI shows)."""
+    """Live Tautulli-style activity — every active Plex stream: who's playing
+    what, direct play vs transcode, bandwidth, progress. App-wide; never
+    raises (an unconfigured/down server is a normal state the UI shows)."""
     try:
         from core.server_activity import get_activity
         return jsonify(get_activity())
@@ -4097,14 +4042,14 @@ def list_automations():
 
 @app.route('/api/automations/master', methods=['GET'])
 def get_automations_master():
-    """The per-side global pause state ({music: bool, video: bool}).
-    It gates whether ANY automation runs on that side — individual enabled
-    flags are untouched, so un-pausing restores exactly what the user had."""
+    """The global pause state ({music: bool}). It gates whether ANY automation
+    runs — individual enabled flags are untouched, so un-pausing restores
+    exactly what the user had."""
     try:
         from core.automation_engine import AutomationEngine
         return jsonify({side: (automation_engine.master_enabled(side) if automation_engine
                                else AutomationEngine.MASTER_DEFAULTS[side])
-                        for side in ('music', 'video')})
+                        for side in ('music',)})
     except Exception as e:
         logger.error(f"Error reading automations master state: {e}")
         return jsonify({"error": str(e)}), 500
@@ -4118,8 +4063,8 @@ def set_automations_master():
     try:
         data = request.get_json(silent=True) or {}
         side = (data.get('side') or '').strip().lower()
-        if side not in ('music', 'video'):
-            return jsonify({"success": False, "error": "side must be music or video"}), 400
+        if side != 'music':
+            return jsonify({"success": False, "error": "side must be music"}), 400
         if automation_engine is None:
             return jsonify({"success": False, "error": "Automation engine unavailable"}), 503
         enabled = bool(data.get('enabled'))
@@ -4286,11 +4231,7 @@ def list_available_scripts():
 
 @app.route('/api/automations/blocks', methods=['GET'])
 def get_automation_blocks():
-    """Return available block types for the automation builder sidebar.
-
-    Music builder only — video-only blocks (scope='video') are filtered out
-    so the music builder never offers a video action. The video side fetches
-    its own scope via /api/video/automations/blocks."""
+    """Return available block types for the automation builder sidebar."""
     scoped = _auto_blocks.blocks_for_scope('music')
     scoped['known_signals'] = _collect_known_signals()
     return jsonify(scoped)
@@ -4470,14 +4411,13 @@ def settings_config_status_endpoint():
 @app.route('/api/config/export', methods=['GET'])
 @admin_only
 def export_config_bundle():
-    """One portable JSON bundle for BOTH sides. ?secrets=1 embeds real
+    """One portable JSON bundle. ?secrets=1 embeds real
     credentials (plaintext — the UI gates this behind an explicit opt-in);
     default redacts them so the export is safe to share."""
     if not config_manager:
         return jsonify({"error": "Config manager unavailable"}), 500
     from datetime import datetime, timezone
 
-    from api.video import get_video_db
     from core.config_export import build_bundle
     include_secrets = request.args.get('secrets', '0') in ('1', 'true', 'yes')
     # Plaintext-credential export is the ONLY endpoint that leaks real secrets,
@@ -4492,7 +4432,7 @@ def export_config_bundle():
                      "without credentials (they'll be re-entered on the new install).",
         }), 403
     bundle = build_bundle(
-        config_manager, get_video_db(),
+        config_manager,
         include_secrets=include_secrets,
         exported_at=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         app_version=SOULSYNC_VERSION.split('+')[0],
@@ -4508,11 +4448,10 @@ def import_config_bundle():
     credentials (the config_manager's per-leaf guard skips the mask)."""
     if not config_manager:
         return jsonify({"error": "Config manager unavailable"}), 500
-    from api.video import get_video_db
     from core.config_export import apply_bundle
     data = request.get_json(silent=True)
     try:
-        summary = apply_bundle(config_manager, get_video_db(), data or {})
+        summary = apply_bundle(config_manager, data or {})
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:   # noqa: BLE001
@@ -6842,8 +6781,7 @@ def enhanced_search_source(source_name):
     """Streaming NDJSON search for one alternate metadata source.
 
     One line per search-kind (artists, albums, tracks) as it completes,
-    plus a final `{"type":"done"}` marker. `youtube_videos` yields a single
-    `videos` chunk via yt-dlp instead.
+    plus a final `{"type":"done"}` marker.
 
     When the requested source's client isn't available (Spotify unauthed,
     Discogs missing token, Hydrabase disconnected, MusicBrainz import
@@ -6860,18 +6798,6 @@ def enhanced_search_source(source_name):
         return jsonify({"artists": [], "albums": [], "tracks": [], "available": False})
 
     deps = _build_search_deps()
-
-    if source_name == 'youtube_videos':
-        youtube_client = _search_orchestrator.resolve_youtube_videos_client(deps)
-        if youtube_client is None:
-            return jsonify({"videos": [], "available": False})
-        try:
-            return app.response_class(
-                _search_orchestrator.stream_youtube_videos(query, youtube_client, run_async),
-                mimetype='application/x-ndjson',
-            )
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
 
     try:
         client, _available = _search_orchestrator.resolve_client(source_name, deps)
@@ -6954,204 +6880,6 @@ def stream_enhanced_search_track():
     except Exception as e:
         logger.error(f"Error streaming enhanced search track: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
-# =============================================================================
-# MUSIC VIDEO DOWNLOADS
-# =============================================================================
-
-_music_video_downloads = {}  # {video_id: {status, progress, path, error}}
-
-
-def _clean_music_video_title(raw_title):
-    """Strip YouTube noise from a video title for metadata search + filing.
-
-    Handles the suffix both parenthesized — "(Official Music Video)" — and
-    BARE at the end of the title ("... Fat Official Music Video", the shape
-    fan uploads use constantly; the old parenthesized-only strip left the
-    noise in the search query, which is half of how a video ends up filed
-    under the uploader's channel name). Bare stripping is deliberately
-    conservative: only unambiguous multi-word forms ('official …', 'music
-    video', 'lyric video', 'visualizer'), so a song genuinely titled
-    "Video" or "Video Games" is never eaten."""
-    import re as _re
-    s = _re.sub(
-        r'\s*[\(\[](official\s*(music\s*)?video|official\s*lyric\s*video|official\s*audio'
-        r'|official\s*hd|hd|4k|remastered|lyric\s*video|visualizer|audio)[\)\]]',
-        '', raw_title or '', flags=_re.IGNORECASE).strip()
-    s = _re.sub(
-        r'[\s\-–—|]*\b(official\s+(music\s+|lyric\s+)?(video|audio)'
-        r'|music\s+video|lyric\s+video|visualizer)\s*$',
-        '', s, flags=_re.IGNORECASE).strip()
-    return _re.sub(r'\s*-\s*$', '', s).strip()
-
-
-def _parse_music_video_artist_title(raw_title, raw_channel):
-    """Artist/title for filing a music video, from the video's own name.
-
-    'Artist - Title' (hyphen, en or em dash) parses to the real artist —
-    the UPLOADER's channel name is only the last resort for titles with no
-    separator at all, because fan-channel uploads ("Bad Boy Edd") are the
-    norm and filing under them scatters one artist's videos across folders."""
-    import re as _re
-    for sep in (' - ', ' – ', ' — '):
-        if sep in (raw_title or ''):
-            artist, title = raw_title.split(sep, 1)
-            title = _re.sub(r'\s*[\(\[].*?[\)\]]', '', title).strip()
-            title = _clean_music_video_title(title) or title
-            return artist.strip(), title
-    return raw_channel, (_clean_music_video_title(raw_title) or raw_title)
-
-@app.route('/api/music-video/download', methods=['POST'])
-def download_music_video():
-    """Download a YouTube video as a music video file to the configured music videos folder."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No data"}), 400
-
-    video_id = data.get('video_id', '')
-    video_url = data.get('url', '')
-    raw_title = data.get('title', '')
-    raw_channel = data.get('channel', '')
-
-    if not video_id or not video_url:
-        return jsonify({"error": "Missing video_id or url"}), 400
-
-    # Check if already downloading
-    if video_id in _music_video_downloads and _music_video_downloads[video_id].get('status') == 'downloading':
-        return jsonify({"error": "Already downloading"}), 409
-
-    # Get and validate music videos path
-    music_videos_path = config_manager.get('library.music_videos_path', '') or ''
-    if not music_videos_path.strip():
-        return jsonify({"error": "Music Videos directory not configured. Set it in Settings > Downloads."}), 400
-    music_videos_path = docker_resolve_path(music_videos_path)
-    try:
-        os.makedirs(music_videos_path, exist_ok=True)
-        # Quick write test
-        test_file = os.path.join(music_videos_path, '.soulsync_write_test')
-        with open(test_file, 'w') as f:
-            f.write('test')
-        os.remove(test_file)
-    except (OSError, PermissionError) as e:
-        return jsonify({"error": f"Music Videos directory is not writable: {e}"}), 400
-
-    # Initialize download state
-    _music_video_downloads[video_id] = {'status': 'searching', 'progress': 0, 'path': None, 'error': None}
-
-    def _do_download():
-        try:
-            # Step 1: Try to match against primary metadata source for clean artist/title
-            _music_video_downloads[video_id]['status'] = 'matching'
-            artist_name = raw_channel
-            track_title = raw_title
-            year = ''
-            matched = False
-
-            import re as _re
-            clean_search = _clean_music_video_title(raw_title)
-
-            try:
-                fallback_client = _get_metadata_fallback_client()
-                results = fallback_client.search_tracks(clean_search, limit=5)
-                if results:
-                    from difflib import SequenceMatcher
-                    best = None
-                    best_score = 0
-                    for r in results:
-                        name_sim = SequenceMatcher(None, clean_search.lower(), r.name.lower()).ratio()
-                        if r.artists:
-                            artist_sim = SequenceMatcher(None, raw_channel.lower(), r.artists[0].lower()).ratio()
-                            name_sim = (name_sim * 0.6) + (artist_sim * 0.4)
-                        if name_sim > best_score:
-                            best_score = name_sim
-                            best = r
-                    if best and best_score >= 0.5 and best.artists:
-                        matched = True
-                        artist_name = best.artists[0]
-                        track_title = best.name
-                        if hasattr(best, 'release_date') and best.release_date:
-                            year = str(best.release_date)[:4]
-                        logger.info(f"[Music Video] Matched to: {artist_name} - {track_title} (confidence: {best_score:.2f})")
-            except Exception as e:
-                logger.error(f"[Music Video] Metadata lookup failed: {e}")
-
-            if not matched:
-                # No confident metadata match — parse 'Artist - Title' from the
-                # video's own name. This must cover EVERY unmatched path
-                # (weak match, lookup crash, and crucially an EMPTY result
-                # list — the old code skipped the parse entirely on zero
-                # results, so the video filed under the uploader's channel:
-                # the '"Weird Al" Yankovic - Fat' → 'bad boy edd/' bug).
-                artist_name, track_title = _parse_music_video_artist_title(raw_title, raw_channel)
-                logger.warning(f"[Music Video] No metadata match, using parsed: {artist_name} - {track_title}")
-
-            # Sanitize for filesystem
-            def _sanitize(s):
-                return _re.sub(r'[<>:"/\\|?*]', '_', s).strip().rstrip('.')
-
-            # Apply video path template
-            video_template = config_manager.get('file_organization.templates', {}).get('video_path', '$artist/$title-video')
-            if not video_template or not video_template.strip():
-                video_template = '$artist/$title-video'
-            safe_artist = _sanitize(artist_name)
-            video_path = video_template
-            video_path = video_path.replace('$artistletter', _shared_artist_letter(safe_artist) if safe_artist else 'A')
-            video_path = video_path.replace('$artist', safe_artist)
-            video_path = video_path.replace('$title', _sanitize(track_title))
-            video_path = video_path.replace('$year', str(year) if year else '')
-            # Clean up empty segments from missing variables
-            video_path = _re.sub(r'//+', '/', video_path).strip('/')
-            # Split into folder and filename
-            path_parts = video_path.rsplit('/', 1)
-            if len(path_parts) == 2:
-                folder_part, file_part = path_parts
-            else:
-                folder_part, file_part = '', path_parts[0]
-            output_dir = os.path.join(music_videos_path, folder_part) if folder_part else music_videos_path
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, file_part)
-
-            # Step 2: Download
-            _music_video_downloads[video_id]['status'] = 'downloading'
-            _music_video_downloads[video_id]['artist'] = artist_name
-            _music_video_downloads[video_id]['title'] = track_title
-
-            def _progress(pct):
-                _music_video_downloads[video_id]['progress'] = round(pct, 1)
-
-            final_path = download_orchestrator.client("youtube").download_music_video(video_url, output_path, progress_callback=_progress)
-
-            if final_path and os.path.exists(final_path):
-                _music_video_downloads[video_id]['status'] = 'completed'
-                _music_video_downloads[video_id]['progress'] = 100
-                _music_video_downloads[video_id]['path'] = final_path
-                logger.info(f"[Music Video] Downloaded: {artist_name} - {track_title} → {final_path}")
-                add_activity_item("", "Music Video Downloaded", f"{artist_name} - {track_title}", "Now")
-            else:
-                _music_video_downloads[video_id]['status'] = 'error'
-                _music_video_downloads[video_id]['error'] = 'Download failed — file not found'
-                logger.error(f"[Music Video] Download failed for: {artist_name} - {track_title}")
-
-        except Exception as e:
-            _music_video_downloads[video_id]['status'] = 'error'
-            _music_video_downloads[video_id]['error'] = str(e)
-            logger.error(f"[Music Video] {e}")
-
-    # Run in background thread
-    import threading
-    threading.Thread(target=_do_download, daemon=True, name=f'music-video-{video_id}').start()
-
-    return jsonify({"success": True, "video_id": video_id})
-
-
-@app.route('/api/music-video/status/<video_id>', methods=['GET'])
-def get_music_video_status(video_id):
-    """Get download status for a music video."""
-    status = _music_video_downloads.get(video_id)
-    if not status:
-        return jsonify({"status": "unknown"})
-    return jsonify(status)
-
 
 @app.route('/api/download', methods=['POST'])
 def start_download():
@@ -40831,115 +40559,6 @@ def _emit_watchlist_count_loop():
         except Exception as e:
             logger.debug(f"Error emitting watchlist count: {e}")
 
-# Soulseek chat push (P3): watch the community room + PM unread state through
-# slskd and push deltas over the socket, so the nav badge and the bell react
-# without the chat page being open. First pass after boot only BASELINES the
-# room (no replaying history as "new"). Wholly idle-gated: zero slskd calls
-# while no browser is connected.
-_chat_push_state = {'room_key': None, 'pm_unread': -1, 'room': None}
-
-def _emit_chat_push_loop():
-    while not globals().get('IS_SHUTTING_DOWN', False):
-        socketio.sleep(6)
-        try:
-            if not _has_connected_clients():
-                continue
-            _slsk = download_orchestrator.client("soulseek") if download_orchestrator else None
-            if not _slsk or not _slsk.base_url:
-                continue
-            room = str(config_manager.get('soulseek.chat_room', 'SoulSync') or 'SoulSync')
-            if room != _chat_push_state['room']:
-                # room renamed (settings cog): re-baseline so the new room's
-                # history never replays as 'new' badge/notification spam
-                _chat_push_state['room'] = room
-                _chat_push_state['room_key'] = None
-            joined = run_async(_slsk.get_joined_rooms()) or []
-            if room not in joined:
-                # auto-join at startup / after an slskd restart (joins don't
-                # persist). chat_auto_join=false is the opt-out for users who
-                # don't want their account sitting in a public room — without
-                # it the loop would re-join them every 6s (un-leaveable). The
-                # chat PAGE still joins on open (an explicit user action).
-                if not config_manager.get('soulseek.chat_auto_join', True):
-                    room = None
-                elif not run_async(_slsk.join_room(room)):
-                    room = None
-            if not room:
-                msgs = []
-            else:
-                msgs = run_async(_slsk.get_room_messages(room)) or []
-            msgs.sort(key=lambda m: str(m.get('timestamp') or ''))
-            key = (str(msgs[-1].get('timestamp') or '') + ':' + str(len(msgs))) if msgs else ''
-            prev_key = _chat_push_state['room_key']
-            if prev_key is None:
-                _chat_push_state['room_key'] = key      # baseline, never replay history
-            elif key != prev_key:
-                prev_stamp = prev_key.rsplit(':', 1)[0]
-                fresh = [m for m in msgs if str(m.get('timestamp') or '') > prev_stamp]
-                _chat_push_state['room_key'] = key
-                if fresh:
-                    # live pushes carry the same DECODED view the API serves
-                    from core import chat_codec
-                    proto_events = []
-                    def _unwrap(m, _sink=proto_events):   # bound at def (B023)
-                        dec = chat_codec.decode(m.get('message'))
-                        if dec is not None and chat_codec.reaction_of(dec):
-                            return None      # reaction carriers never render/badge
-                        if dec is not None:
-                            _p = chat_codec.protocol_of(dec)
-                            if _p:
-                                # machine coordination: never archived, pushed
-                                # on its own channel for real-time handling.
-                                # Only PURE carriers (empty text) vanish —
-                                # piggybacked text still renders/archives.
-                                _sink.append({
-                                    'username': m.get('username'),
-                                    'timestamp': m.get('timestamp'), 'p': _p})
-                                if not dec.get('t'):
-                                    return None
-                        out = {'username': m.get('username'),
-                               'message': dec['t'] if dec else m.get('message'),
-                               'timestamp': m.get('timestamp')}
-                        if dec:
-                            out['rich'] = True
-                            rep = chat_codec.reply_of(dec)
-                            if rep:
-                                out['reply'] = rep
-                            _f = chat_codec.file_of(dec)
-                            if _f:
-                                out['file'] = _f
-                        return out
-                    decoded = [x for x in (_unwrap(m) for m in fresh) if x]
-                    if proto_events:
-                        socketio.emit('chat:room_protocol', {
-                            'room': room, 'events': proto_events[-40:]})
-                    if decoded:      # a reaction-only tick still tracks PMs below
-                        try:
-                            get_database().add_chat_messages(room, decoded)
-                        except Exception:
-                            logger.debug("chat: loop archive write failed", exc_info=True)
-                        socketio.emit('chat:room_message', {
-                            'room': room,
-                            'messages': decoded[-20:],
-                        })
-            convos = run_async(_slsk.get_conversations()) or []
-            unread_users = [str(c.get('username') or '') for c in convos
-                            if c.get('hasUnAcknowledgedMessages')
-                            or (c.get('unAcknowledgedMessageCount') or 0) > 0]
-            unread = len([u for u in unread_users if u])
-            prev = _chat_push_state['pm_unread']
-            if unread != prev:
-                _chat_push_state['pm_unread'] = unread
-                socketio.emit('chat:unread', {
-                    'pms': unread,
-                    'users': [u for u in unread_users if u][:3],
-                    # 'grew' gates the toast: only a RISING count notifies (a read
-                    # clearing the flag must not), and never the boot baseline
-                    'grew': prev >= 0 and unread > prev,
-                })
-        except Exception:
-            logger.debug("chat push loop error", exc_info=True)
-
 # Anti-leech challenge auto-responder ("please type 'human' in this chat"):
 # NOT idle-gated — the whole point is answering at 3am with no browser open,
 # so blocked overnight grabs unblock themselves. One cheap conversations poll
@@ -41373,27 +40992,6 @@ _configure_enrichment_api(
 
 app.register_blueprint(_create_enrichment_blueprint())
 
-# Soulseek chat (rooms + PMs through slskd) — side-neutral, absolute /api/chat
-# paths, mounted OUTSIDE the video blueprint so music-only profiles reach it.
-from api.chat import configure as _configure_chat_api, create_blueprint as _create_chat_blueprint
-def _chat_youtube_search(query, max_results):
-    """Jukebox search seam: the shared yt-dlp client, or None → paste-only."""
-    yt = download_orchestrator.client("youtube")
-    if yt is None:
-        return []
-    return run_async(yt.search_videos(query, max_results=max_results))
-
-
-_configure_chat_api(
-    client_getter=lambda: download_orchestrator.client("soulseek"),
-    run_async=run_async,
-    config_get=lambda key, default=None: config_manager.get(key, default),
-    config_set=lambda key, value: config_manager.set(key, value),
-    db_getter=get_database,
-    youtube_search=_chat_youtube_search,
-)
-app.register_blueprint(_create_chat_blueprint())
-
 # Record-label watchlist (search labels / browse a label's catalog / follow) —
 # purely additive, self-contained blueprint reading only watchlist_labels + the
 # keyless MusicBrainz catalog layer; absolute /api/labels/* paths, no prefix.
@@ -41401,20 +40999,6 @@ from api.labels import configure as _configure_labels_api, create_blueprint as _
 _configure_labels_api(db_getter=get_database, itunes_getter=_get_itunes_client,
                       deezer_getter=_get_deezer_client)
 app.register_blueprint(_create_labels_blueprint())
-
-# Video side API (isolated: reads database/video_library.db only, never music)
-from api.video import create_video_blueprint as _create_video_blueprint
-app.register_blueprint(_create_video_blueprint(), url_prefix='/api/video')
-
-# Resume video downloads at boot: without this the monitor only starts on a grab or
-# when the Downloads page opens, so in-flight downloads (and orphaned 'searching' rows)
-# after a restart would sit untracked until the user happened to visit the page.
-try:
-    from core.video.download_monitor import ensure_started as _ensure_video_download_monitor
-    from api.video import get_video_db as _get_video_db
-    _ensure_video_download_monitor(_get_video_db)
-except Exception:
-    logger.warning("could not start the video download monitor at boot", exc_info=True)
 
 
 def _emit_rate_monitor_loop():
@@ -41561,36 +41145,6 @@ def _emit_enrichment_status_loop():
                 socketio.emit(f'enrichment:{name}', status)
             except Exception as e:
                 logger.debug(f"Error emitting {name} status: {e}")
-
-def _emit_video_enrichment_status_loop():
-    """Push the VIDEO enrichment worker statuses over the socket every 2s, exactly
-    like the music enrichment loop — so the video dashboard listens instead of
-    polling /api/video/enrichment/<svc>/status (that browser polling was flooding
-    the access log). No-op until the video engine is actually running, so this
-    never spins it up on the music side."""
-    from core.video.enrichment.engine import peek_video_enrichment_engine
-    while not globals().get('IS_SHUTTING_DOWN', False):
-        socketio.sleep(2)
-        eng = peek_video_enrichment_engine()
-        if eng is None:
-            continue
-        # Emit for EVERY registered worker (matchers + backfill: fanart / opensubtitles
-        # / ryd / sponsorblock) so new dashboard buttons get live status with no extra
-        # wiring here.
-        for svc, w in (eng.workers or {}).items():
-            try:
-                socketio.emit(f'enrichment:{svc}', w.get_stats())
-            except Exception as e:
-                logger.debug(f"Error emitting video {svc} status: {e}")
-        # The YouTube date enricher is a standalone daemon (not an engine worker),
-        # but it reports the SAME stats shape — push it on the same socket so its
-        # dashboard orb listens like the others (no /enrichment/youtube/status poll).
-        try:
-            from core.video.youtube_enrichment import get_youtube_date_enricher
-            socketio.emit('enrichment:youtube', get_youtube_date_enricher().stats())
-        except Exception as e:
-            logger.debug(f"Error emitting video youtube status: {e}")
-
 
 def _emit_tool_progress_loop():
     """Background thread that pushes all tool progress statuses every 1 second."""
@@ -42156,7 +41710,6 @@ def start_runtime_services():
         socketio.start_background_task(_emit_service_status_loop)
         socketio.start_background_task(_emit_watchlist_count_loop)
         socketio.start_background_task(_emit_download_status_loop)
-        socketio.start_background_task(_emit_chat_push_loop)
         socketio.start_background_task(_chat_auto_prove_loop)
         # Server Activity — subscriber-gated live push (idle when no drawer open)
         socketio.start_background_task(_emit_server_activity_loop)
@@ -42167,9 +41720,6 @@ def start_runtime_services():
         socketio.start_background_task(_emit_wishlist_count_loop)
         # Phase 3: Enrichment sidebar workers
         socketio.start_background_task(_emit_enrichment_status_loop)
-        # Phase 3 (video): push video enrichment status so the video dashboard
-        # listens instead of polling (matches music; no access-log flood).
-        socketio.start_background_task(_emit_video_enrichment_status_loop)
         # Phase 4: Tool progress pollers
         socketio.start_background_task(_emit_tool_progress_loop)
         # Phase 5: Sync/discovery progress + scans

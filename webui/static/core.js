@@ -788,17 +788,6 @@ function initializeWebSocket() {
     socket.on('watchlist:count', handleWatchlistCountUpdate);
     socket.on('downloads:batch_update', handleDownloadBatchUpdate);
 
-    // Soulseek chat push (badges + PM toasts live in chat.js; guard: the
-    // module owns all chat state, core.js only routes the events)
-    socket.on('chat:room_message', function (d) {
-        if (window.ChatPage && ChatPage.onRoomMessages) ChatPage.onRoomMessages(d);
-    });
-    socket.on('chat:unread', function (d) {
-        if (window.ChatPage && ChatPage.onUnread) ChatPage.onUnread(d);
-    });
-    socket.on('chat:room_protocol', function (d) {
-        if (window.ChatPage && ChatPage.onRoomProtocol) ChatPage.onRoomProtocol(d);
-    });
 
     // Phase 2 event listeners (dashboard pollers)
     socket.on('rate-monitor:update', _handleRateMonitorUpdate);
@@ -904,11 +893,6 @@ function initializeWebSocket() {
         // be read from a module, so the vanilla side announces and React reacts.
         window.dispatchEvent(new CustomEvent('ss:automation-progress', { detail: data }));
     });
-    socket.on('overlay:progress', (data) => { if (typeof updateOverlayTask === 'function') updateOverlayTask(data); });
-    socket.on('collections:sync', (data) => { if (typeof updateCollectionSyncTask === 'function') updateCollectionSyncTask(data); });
-    socket.on('collections:artwork', (data) => { if (typeof updateCollectionArtTask === 'function') updateCollectionArtTask(data); });
-    socket.on('video:bulk', (data) => { if (typeof updateVideoBulkTask === 'function') updateVideoBulkTask(data); });
-    socket.on('video:repair:progress', (data) => { if (typeof updateVideoRepairProgressFromData === 'function') updateVideoRepairProgressFromData(data); });
 }
 
 // ── Quick Actions tiles: animation == gauge ──

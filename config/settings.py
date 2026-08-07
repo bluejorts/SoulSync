@@ -745,7 +745,6 @@ class ConfigManager:
             },
             "library": {
                 "music_paths": [],
-                "music_videos_path": "",
                 # Library Organize: when the tool re-resolves a track from the
                 # metadata source, the source's title/album CASING often differs
                 # from a file the user already curated (Spotify capitalizing

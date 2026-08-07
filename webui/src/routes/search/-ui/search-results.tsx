@@ -4,9 +4,7 @@ import type {
   SearchArtist,
   SearchLabel,
   SearchTrack,
-  SearchVideo,
 } from '../-search.types';
-import type { VideoProgress } from './video-grid';
 
 import {
   albumIdentity,
@@ -20,7 +18,6 @@ import {
 } from '../-search.helpers';
 import { SOURCE_LABELS } from '../-search.types';
 import { CompactItem, ResultSection } from './compact-item';
-import { VideoGrid } from './video-grid';
 
 /** Ownership carried by IDENTITY, never by list position. See the helpers. */
 export interface OwnershipState {
@@ -81,11 +78,11 @@ function albumImage(album: SearchAlbum): string | undefined {
   return album.image_url || album.images?.[0]?.url || undefined;
 }
 
-/** True for the two sources that show no metadata sections at all. */
+/** True for the source that shows no metadata sections at all. */
 function suppressesLabels(source: string): boolean {
-  // search.js:429-434 — the Labels section is fetched additively, so it has to
-  // be hidden explicitly for both of these, not merely left unfilled.
-  return source === 'youtube_videos' || source === 'soulseek';
+  // The Labels section is fetched additively, so it has to be hidden
+  // explicitly here, not merely left unfilled.
+  return source === 'soulseek';
 }
 
 /**
@@ -100,10 +97,6 @@ function suppressesLabels(source: string): boolean {
  *    `enh-artist-section`, which strips the card chrome every other section has
  *    (index.html:4203-4226 + style.css:40214-40244). Flat siblings would render
  *    two bordered cards where the design has two bare columns.
- * 2. `youtube_videos` is EXCLUSIVE: search.js:178-186 hides all six sections and
- *    shows only the video grid. It matters because labels are fetched
- *    additively, so without the rule a video search grows a Labels section the
- *    vanilla never showed.
  */
 export function SearchResults({
   activeSource,
@@ -112,8 +105,6 @@ export function SearchResults({
   albums,
   tracks,
   labels,
-  videos,
-  videoProgress,
   ownership,
   artistImages,
   onArtistHref,
@@ -121,7 +112,6 @@ export function SearchResults({
   onAlbumClick,
   onTrackClick,
   onTrackPlay,
-  onVideoDownload,
 }: {
   /** Required, not derived: it is what makes the videos-only rule unforgettable. */
   activeSource: string;
@@ -130,8 +120,6 @@ export function SearchResults({
   albums: SearchAlbum[];
   tracks: SearchTrack[];
   labels: SearchLabel[];
-  videos: SearchVideo[];
-  videoProgress: Record<string, VideoProgress>;
   ownership: OwnershipState;
   /** Lazily-resolved images, keyed by artist id. */
   artistImages: Record<string, string>;
@@ -145,7 +133,6 @@ export function SearchResults({
   onTrackClick: (track: SearchTrack) => void;
   /** The library row is present only for an owned track with a local file. */
   onTrackPlay: (track: SearchTrack, libraryRow: LibraryCheckTrack | undefined) => void;
-  onVideoDownload: (video: SearchVideo) => void;
 }) {
   const { albums: fullAlbums, singlesAndEps } = splitAlbums(albums);
 
@@ -154,13 +141,6 @@ export function SearchResults({
   // ran in. Reset every render, so it is deterministic rather than stateful.
   let badgeSlot = 0;
   const nextBadgeDelay = () => `${badgeSlot++ * BADGE_STAGGER_MS}ms`;
-
-  // The grid carries its own "No music videos found" state, which is the whole
-  // reason it can be rendered unconditionally here: a videos search that found
-  // nothing has to say so rather than show a blank panel.
-  if (activeSource === 'youtube_videos') {
-    return <VideoGrid videos={videos} progress={videoProgress} onDownload={onVideoDownload} />;
-  }
 
   const albumCard = (album: SearchAlbum, index: number) => {
     const identity = albumIdentity(album);
@@ -339,10 +319,6 @@ export function SearchResults({
         ))}
       </ResultSection>
 
-      {/* No video grid down here on purpose. Only the youtube_videos source ever
-          fills `videos`, and that source returns above — so a grid rendered here
-          would be a branch that cannot be reached, which is worse than none. The
-          vanilla agrees: it hides #enh-videos-section for every other source. */}
     </>
   );
 }

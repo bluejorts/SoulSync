@@ -1,14 +1,8 @@
 """Pin core.slskd_throttle — the ONE process-wide slskd search-creation budget.
 
-Both sides drain it: the music client (SoulseekClient._wait_for_rate_limit)
-and the video downloader (core.video.slskd_search._throttle_search). It
-supersedes the two per-side limiters (music's compute_search_wait_seconds,
-video's module-local window): each was correct alone, but together they let
-the process fire ~70 searches / 220s at a slskd instance that 429s at ~35.
-
-Covers the reservation math (min-gap, window cap, 429 cooldown + clamps),
-the status payload, and — the point — that music and video reservations
-land in the SAME window.
+The music client (SoulseekClient._wait_for_rate_limit) drains it. Covers the
+reservation math (min-gap, window cap, 429 cooldown + clamps) and the status
+payload.
 """
 
 from __future__ import annotations
@@ -89,28 +83,6 @@ def test_status_reports_the_budget():
     assert s['max_searches_per_window'] == th.MAX_PER_WINDOW
     assert s['window_seconds'] == th.WINDOW_SECONDS
     assert s['searches_remaining'] == th.MAX_PER_WINDOW - 3
-
-
-# ── the point: music + video drain ONE window ─────────────────────────────────
-
-def test_music_and_video_reservations_share_the_window(monkeypatch):
-    from core.soulseek_client import SoulseekClient
-    import core.video.slskd_search as vss
-
-    monkeypatch.setattr(time, "sleep", lambda s: None)   # video min-gap would really sleep
-
-    music = SimpleNamespace(search_min_delay_seconds=0.0)
-    asyncio.run(SoulseekClient._wait_for_rate_limit(music))   # a music search
-    vss._throttle_search()                                     # a video search
-    assert th.status()['searches_in_window'] == 2              # same budget, both counted
-
-
-def test_video_429_cooldown_stalls_a_music_search(monkeypatch):
-    import core.video.slskd_search as vss
-
-    vss._note_rate_limited("20")                    # video hits slskd's wall...
-    # ...and the next music-side reservation waits out the shared cooldown
-    assert th.reserve_search_slot(0.0) >= time.monotonic() + 18
 
 
 def test_music_min_delay_knob_spaces_shared_reservations(monkeypatch):

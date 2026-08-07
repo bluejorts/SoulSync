@@ -507,7 +507,7 @@ class MusicDatabase:
             """)
 
             # Label watchlist (labels feature) — follow a record label to monitor
-            # its new releases, mirroring the video-side studio watchlist. Purely
+            # its new releases. Purely
             # ADDITIVE: a brand-new table, never touched by any existing path;
             # nothing here reads or alters artists/albums/tracks/watchlist_artists.
             # A label is monitored like a studio and displayed like a discography;

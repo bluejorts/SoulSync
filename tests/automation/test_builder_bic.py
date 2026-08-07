@@ -169,11 +169,7 @@ def test_music_finding_emit_fires_and_never_raises(tmp_path):
 
 def test_new_triggers_land_on_the_right_sides():
     music = {b['type'] for b in blocks_for_scope('music')['triggers']}
-    video = {b['type'] for b in blocks_for_scope('video')['triggers']}
     assert {'music_repair_finding_created', 'music_repair_scan_completed'} <= music
-    assert not {'music_repair_finding_created'} & video
-    assert {'video_grab_started', 'video_request_created', 'video_request_approved'} <= video
-    assert not {'video_grab_started'} & music
 
 
 def test_monthly_time_carries_tz_field():

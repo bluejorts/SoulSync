@@ -4,8 +4,6 @@
    — the old hardcoded 8-table list orphaned per-profile service credentials,
    notification history, issues, blocklists and more, and silently fell
    further behind with every new profile feature.
-2. The video DB gets the same schema-derived sweep for its profile-keyed rows
-   (requests, issues), called when a profile is deleted.
 3. The mirrored-playlist by-id HTTP routes carry an owner-or-admin gate
    (mirrored_playlist_visible) — the IDOR where any profile could read,
    rename, re-point, pipeline-run, or DELETE another's playlists by id.
@@ -24,7 +22,6 @@ from pathlib import Path
 import pytest
 
 from database.music_database import MusicDatabase
-from database.video_database import VideoDatabase
 
 _ROOT = Path(__file__).resolve().parent.parent
 _WS = (_ROOT / "web_server.py").read_text(encoding="utf-8")
@@ -118,32 +115,6 @@ def test_delete_profile_cascades_mirrored_playlist_tracks(mdb):
             "cascade did not fire — orphaned playlist tracks"
     finally:
         conn.close()
-
-
-# ── 2. video sweep ───────────────────────────────────────────────────────────
-
-def test_video_profile_sweep(tmp_path):
-    vdb = VideoDatabase(database_path=str(tmp_path / "video.db"))
-    conn = vdb._get_connection()
-    try:
-        conn.execute("INSERT INTO video_requests (profile_id, kind, tmdb_id, title) "
-                     "VALUES (2, 'movie', 1, 'Heat')")
-        conn.execute("INSERT INTO video_requests (profile_id, kind, tmdb_id, title) "
-                     "VALUES (1, 'movie', 2, 'Ronin')")
-        conn.commit()
-    finally:
-        conn.close()
-    removed = vdb.delete_profile_data(2)
-    assert removed >= 1
-    conn = vdb._get_connection()
-    try:
-        assert conn.execute("SELECT COUNT(*) FROM video_requests "
-                            "WHERE profile_id = 2").fetchone()[0] == 0
-        assert conn.execute("SELECT COUNT(*) FROM video_requests "
-                            "WHERE profile_id = 1").fetchone()[0] == 1
-    finally:
-        conn.close()
-    assert vdb.delete_profile_data(1) == 0        # admin never swept
 
 
 # ── 3. HTTP IDOR gate: every by-id mirrored route checks visibility ──────────

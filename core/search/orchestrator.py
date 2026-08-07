@@ -9,7 +9,6 @@ Two routes funnel through here:
 - `/api/enhanced-search/source/<src>` → `stream_source_search` (generator)
   - NDJSON: yields one line per kind (artists / albums / tracks) as each
     finishes, plus a final `{"type":"done"}` line
-  - Has its own special-case for `youtube_videos` which uses yt-dlp
 
 The route layer wraps the generator in a Flask `Response(...,
 mimetype='application/x-ndjson')`. Everything else is plain Python.
@@ -34,7 +33,7 @@ VALID_SOURCES = (
     'spotify', 'itunes', 'deezer', 'discogs', 'hydrabase', 'musicbrainz', 'amazon', 'jiosaavn', 'bandcamp',
 )
 
-VALID_STREAM_SOURCES = VALID_SOURCES + ('youtube_videos',)
+VALID_STREAM_SOURCES = VALID_SOURCES
 
 
 @dataclass
@@ -238,7 +237,6 @@ def _alternate_sources(primary_source: str, deps: SearchDeps) -> list[str]:
     for name in EXPERIMENTAL_SOURCES:
         if primary_source != name and is_source_enabled(name):
             alts.append(name)
-    alts.append('youtube_videos')   # always available (yt-dlp, no auth)
     alts.append('musicbrainz')      # always available (public API)
     return alts
 
@@ -342,41 +340,6 @@ def run_enhanced_search(query: str, requested_source: str, deps: SearchDeps) -> 
 # ---------------------------------------------------------------------------
 # NDJSON streaming for /api/enhanced-search/source/<src>
 # ---------------------------------------------------------------------------
-
-def resolve_youtube_videos_client(deps: SearchDeps):
-    """Return the YouTube download client (used for music-video search)
-    via the orchestrator's generic accessor, or None when unavailable."""
-    if not deps.download_orchestrator or not hasattr(deps.download_orchestrator, 'client'):
-        return None
-    return deps.download_orchestrator.client('youtube')
-
-
-def stream_youtube_videos(query: str, youtube_client, run_async: Callable) -> Iterator[str]:
-    """yt-dlp video search generator — yields one videos chunk + done marker.
-
-    Caller is responsible for verifying youtube_client is not None.
-    """
-    try:
-        video_query = f"{query} official music video"
-        results = run_async(youtube_client.search_videos(video_query, max_results=20))
-        videos = []
-        for v in (results or []):
-            videos.append({
-                'video_id': v.video_id,
-                'title': v.title,
-                'channel': v.channel,
-                'duration': v.duration,
-                'thumbnail': v.thumbnail,
-                'url': v.url,
-                'view_count': v.view_count,
-                'upload_date': v.upload_date,
-            })
-        yield json.dumps({'type': 'videos', 'data': videos}) + '\n'
-    except Exception as e:
-        logger.error(f"YouTube music video search failed: {e}")
-        yield json.dumps({'type': 'videos', 'data': []}) + '\n'
-    yield json.dumps({'type': 'done'}) + '\n'
-
 
 def stream_metadata_source(source_name: str, query: str, client,
                            prefer_free: bool = False) -> Iterator[str]:

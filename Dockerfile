@@ -69,7 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Deno — JavaScript runtime for yt-dlp. YouTube gates its downloadable formats
 # behind JS challenges (nsig); without a JS runtime, yt-dlp's extraction is
-# deprecated and streams / music-video downloads fail with "Requested format
+# deprecated and streams / downloads fail with "Requested format
 # is not available". Deno is yt-dlp's default-enabled runtime; the official
 # installer auto-detects amd64/arm64. `deno --version` fails the build early
 # if the install ever breaks.
@@ -110,8 +110,8 @@ COPY --chown=soulsync:soulsync --from=webui-builder /app/webui/static/dist /app/
 # soulsync, the album-bundle copy fails with "[Errno 13] Permission denied:
 # 'storage'" because /app itself is root-owned and the soulsync UID can't
 # create a top-level dir there.
-RUN mkdir -p /app/config /app/data /app/logs /app/downloads /app/Transfer /app/Staging /app/Stream /app/storage /app/MusicVideos /app/scripts && \
-    chown soulsync:soulsync /app/config /app/data /app/logs /app/downloads /app/Transfer /app/Staging /app/Stream /app/storage /app/MusicVideos /app/scripts
+RUN mkdir -p /app/config /app/data /app/logs /app/downloads /app/Transfer /app/Staging /app/Stream /app/storage /app/scripts && \
+    chown soulsync:soulsync /app/config /app/data /app/logs /app/downloads /app/Transfer /app/Staging /app/Stream /app/storage /app/scripts
 
 # Create defaults directory and copy template files
 # These will be used by entrypoint.sh to initialize empty volumes
@@ -122,7 +122,7 @@ RUN mkdir -p /defaults && \
 
 # Create volume mount points
 # NOTE: Changed /app/database to /app/data to avoid overwriting Python package
-VOLUME ["/app/config", "/app/data", "/app/logs", "/app/downloads", "/app/Transfer", "/app/MusicVideos", "/app/scripts"]
+VOLUME ["/app/config", "/app/data", "/app/logs", "/app/downloads", "/app/Transfer", "/app/scripts"]
 
 # Copy and set up entrypoint script
 COPY entrypoint.sh /entrypoint.sh
@@ -142,11 +142,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/app/data/music_library.db
-# The video side's DB + its poster-asset store (assets.default_root derives from
-# this path) MUST live in the persisted volume too — without it, every container
-# recreate wiped video_library.db (watchlists, collections, overlays, issues,
-# the YouTube ownership ledger).
-ENV VIDEO_DATABASE_PATH=/app/data/video_library.db
 ENV PUID=1000
 ENV PGID=1000
 ENV UMASK=022

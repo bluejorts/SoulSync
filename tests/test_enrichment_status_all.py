@@ -1,6 +1,6 @@
 """Bundled enrichment status hydrate (request-flood P2).
 
-Page load fired ~13 music + ~15 video per-service /status GETs; each side now
+Page load fired ~13 per-service /status GETs; the page now
 has a /status-all bundle collected with per-service isolation (one failing
 collector degrades to its own error field, never the whole response), and the
 frontends hydrate from the bundle with per-service fallback.
@@ -84,16 +84,3 @@ def test_music_frontend_hydrates_through_the_shim():
     assert not re.search(r"fetch\('/api/enrichment/[a-z_]+/status'\)", js)
     mgr = (_ROOT / "webui" / "static" / "enrichment-manager.js").read_text(encoding="utf-8", errors="replace")
     assert "_enrichmentStatusFetch(w.id)" in mgr
-
-
-def test_video_backend_and_frontend_bundle():
-    api = (_ROOT / "api" / "video" / "enrichment.py").read_text(encoding="utf-8", errors="replace")
-    assert '"/enrichment/status-all"' in api
-    mgr = (_ROOT / "webui" / "static" / "video" / "video-enrichment-manager.js").read_text(
-        encoding="utf-8", errors="replace")
-    assert "'/api/video/enrichment/status-all'" in mgr
-    dash = (_ROOT / "webui" / "static" / "video" / "video-enrichment.js").read_text(
-        encoding="utf-8", errors="replace")
-    assert "'/api/video/enrichment/status-all'" in dash
-    # per-service fallback survives on both surfaces
-    assert "pollOne" in dash

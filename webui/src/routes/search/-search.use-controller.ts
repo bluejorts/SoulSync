@@ -7,7 +7,6 @@ import {
   fetchConfigStatus,
   fetchEnhancedSearch,
   fetchMetadataStatus,
-  streamVideoSearch,
 } from './-search.api';
 import {
   canSelectSource,
@@ -223,23 +222,7 @@ export function useSearchController({
     const stillCurrent = () => tokensRef.current[source] === requestId;
 
     try {
-      if (source === 'youtube_videos') {
-        await streamVideoSearch(
-          query,
-          (videos) => {
-            // Re-checked per chunk: a long stream can outlive its query.
-            if (!stillCurrent()) return;
-            setState((prev) => ({
-              ...prev,
-              sources: {
-                ...prev.sources,
-                [source]: { ...emptySourceResults(), videos },
-              },
-            }));
-          },
-          controller.signal,
-        );
-      } else {
+      {
         const data = await fetchEnhancedSearch(query, source, controller.signal);
         if (!stillCurrent()) return;
         const served = fallbackFor(source, data);

@@ -45,7 +45,7 @@ def test_redacted_export_returns_a_valid_bundle(client):
     b = r.get_json()
     assert b.get('soulsync_config_export') is True
     assert b.get('includes_secrets') is False
-    assert isinstance(b.get('music'), dict) and isinstance(b.get('video'), dict)
+    assert isinstance(b.get('music'), dict)
 
 
 def test_credentials_export_blocked_without_login_mode(client, monkeypatch):

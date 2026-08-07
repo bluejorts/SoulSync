@@ -85,10 +85,6 @@ const SOURCE_LABELS = {
         logo: '/static/img/brands/bandcamp.svg',
         tabClass: 'enh-tab-bandcamp', badgeClass: 'enh-badge-bandcamp',
     },
-    youtube_videos: {
-        text: 'Music Videos', icon: '🎬',
-        tabClass: 'enh-tab-youtube', badgeClass: 'enh-badge-youtube',
-    },
     soulseek: {
         // Routes through /api/search (raw slskd file results) — historically
         // called "Basic Search" in the UI before the source picker landed.
@@ -98,10 +94,10 @@ const SOURCE_LABELS = {
 };
 
 // Canonical display order for the source picker. Standard metadata sources
-// first, then YouTube Music Videos, then Soulseek (basic-file source).
+// first, then Soulseek (basic-file source).
 const SOURCE_ORDER = [
     'spotify', 'itunes', 'deezer', 'discogs', 'hydrabase', 'amazon', 'musicbrainz', 'jiosaavn', 'bandcamp',
-    'youtube_videos', 'soulseek',
+    'soulseek',
 ];
 
 // Sources the config-status endpoint doesn't cover because they don't need
@@ -109,7 +105,7 @@ const SOURCE_ORDER = [
 // Soulseek IS configurable (needs slskd URL), so it's intentionally not here:
 // /api/settings/config-status reports its real state and the picker dims it
 // when no slskd is set up, redirecting clicks to Settings → Downloads.
-const _ALWAYS_CONFIGURED_SOURCES = new Set(['amazon', 'musicbrainz', 'jiosaavn', 'bandcamp', 'youtube_videos']);
+const _ALWAYS_CONFIGURED_SOURCES = new Set(['amazon', 'musicbrainz', 'jiosaavn', 'bandcamp']);
 
 // Experimental metadata sources — each is opt-in via Settings → Advanced →
 // Experimental and individually toggleable. The backend reports their on/off
@@ -179,7 +175,7 @@ function visibleSourceOrder(enabledExperimental = new Set()) {
 
 // Fetch /api/settings/config-status and return a map { src -> bool }
 // covering every visible source. Sources not present in the backend
-// registry (musicbrainz / youtube_videos / soulseek) are reported as
+// registry (musicbrainz / soulseek) are reported as
 // configured so the picker doesn't dim always-available sources.
 async function fetchSourceConfiguredMap(enabledExperimental = new Set()) {
     const map = {};
@@ -214,8 +210,7 @@ async function fetchSourceConfiguredMap(enabledExperimental = new Set()) {
 
 // Shared source-picker controller used by both the unified Search page
 // and the global search widget. Owns all the query/active-source/per-query
-// cache state, fetch dispatch (enhanced-search for standard sources, NDJSON
-// for YouTube Music Videos), configured-source discovery, fallback tracking,
+// cache state, fetch dispatch, configured-source discovery, fallback tracking,
 // and icon-row rendering. Each surface passes per-surface wiring — DOM
 // elements, a CSS class prefix, and callbacks — and the controller takes
 // care of the rest.
@@ -454,9 +449,7 @@ function createSearchController({
         abortCtrl = new AbortController();
 
         try {
-            if (src === 'youtube_videos') {
-                await _fetchYouTubeVideos(query, abortCtrl.signal, requestId);
-            } else {
+            {
                 const data = await enhancedSearchFetch(query, {
                     source: src,
                     signal: abortCtrl.signal,
@@ -470,7 +463,6 @@ function createSearchController({
                     artists: data.spotify_artists || [],
                     albums: data.spotify_albums || [],
                     tracks: data.spotify_tracks || [],
-                    videos: [],
                     db_artists: data.db_artists || [],
                 };
                 const served = data.primary_source || data.metadata_source;
@@ -493,48 +485,6 @@ function createSearchController({
             }
             if (err.name !== 'AbortError') {
                 console.debug(`Source fetch failed for ${src}:`, err);
-            }
-        }
-    }
-
-    async function _fetchYouTubeVideos(query, signal, requestId) {
-        const res = await fetch('/api/enhanced-search/source/youtube_videos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-            signal,
-        });
-        if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
-
-        // Bail before allocating cache entry if a newer YouTube request
-        // has superseded us.
-        if (_sourceRequestIds['youtube_videos'] !== requestId) return;
-
-        state.sources['youtube_videos'] = {
-            artists: [], albums: [], tracks: [], videos: [], db_artists: [],
-        };
-        const cache = state.sources['youtube_videos'];
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (_sourceRequestIds['youtube_videos'] !== requestId) return;
-            buffer += decoder.decode(value, { stream: true });
-            let idx;
-            while ((idx = buffer.indexOf('\n')) !== -1) {
-                const line = buffer.slice(0, idx).trim();
-                buffer = buffer.slice(idx + 1);
-                if (!line) continue;
-                try {
-                    const chunk = JSON.parse(line);
-                    if (chunk.type === 'videos') {
-                        cache.videos = chunk.data;
-                        if (state.activeSource === 'youtube_videos') _notify();
-                    }
-                } catch (_) { /* best-effort NDJSON parse */ }
             }
         }
     }
@@ -2975,11 +2925,10 @@ function showArtistDownloadsSection() {
  * Show download bubbles on the Library page (mirrors showArtistDownloadsSection)
  */
 function showLibraryDownloadsSection() {
-    // Anchor on the MUSIC library's grid and derive the container FROM it.
-    // Never querySelector('.library-content'): the video library page reuses
-    // that class and its copy comes FIRST in the DOM, so the old global query
-    // grabbed the wrong container and insertBefore threw ("not a child of
-    // this node") — killing the whole Library page init (#1038).
+    // Anchor on the library's grid and derive the container FROM it —
+    // querySelector('.library-content') once grabbed the wrong container when
+    // another page reused that class, and insertBefore threw ("not a child of
+    // this node"), killing the whole Library page init (#1038).
     // The React library page renders a dedicated host with NO React children,
     // so this section can own that subtree outright and React never reconciles
     // it away. That host is the normal path now that the vanilla music page is

@@ -104,9 +104,9 @@ export function canSelectSource(source: string, enabledExperimental: ReadonlySet
   return !EXPERIMENTAL_SOURCES.has(source) || enabledExperimental.has(source);
 }
 
-/** Empty slice — every consumer reads five arrays, so none of them may be absent. */
+/** Empty slice — every consumer reads four arrays, so none of them may be absent. */
 export function emptySourceResults(): SourceResults {
-  return { db_artists: [], artists: [], albums: [], tracks: [], videos: [] };
+  return { db_artists: [], artists: [], albums: [], tracks: [] };
 }
 
 /** Unpack /api/enhanced-search into the per-source cache shape. */
@@ -116,7 +116,6 @@ export function sourceResultsFromResponse(data: EnhancedSearchResponse): SourceR
     artists: data.spotify_artists ?? [],
     albums: data.spotify_albums ?? [],
     tracks: data.spotify_tracks ?? [],
-    videos: [],
   };
 }
 
@@ -225,20 +224,6 @@ export function formatDuration(durationMs: number | undefined | null): string {
 }
 
 /**
- * Video durations are SECONDS, unlike track durations which are milliseconds.
- *
- * Two fields both called `duration`, in different units, on shapes that sit
- * side by side in the same results — kept as separate functions so no caller
- * has to remember which is which.
- */
-export function formatVideoDuration(seconds: number | undefined | null): string {
-  const total = Number(seconds);
-  if (!Number.isFinite(total) || total <= 0) return '';
-  const minutes = Math.floor(total / 60);
-  return `${minutes}:${String(Math.floor(total % 60)).padStart(2, '0')}`;
-}
-
-/**
  * An artist's display line — two fixed strings, as search.js:480/494 has them.
  *
  * Deliberately NOT a track count: `_build_db_artists`
@@ -301,16 +286,14 @@ export function labelMetaLine(label: { type?: string; area?: string }): string {
 /**
  * Does this source's result set have anything at all in it?
  *
- * Drives the empty state. Videos count: a youtube_videos search with videos and
- * nothing else is NOT empty.
+ * Drives the empty state.
  */
 export function hasAnyResults(results: SourceResults): boolean {
   return (
     results.db_artists.length > 0 ||
     results.artists.length > 0 ||
     results.albums.length > 0 ||
-    results.tracks.length > 0 ||
-    results.videos.length > 0
+    results.tracks.length > 0
   );
 }
 

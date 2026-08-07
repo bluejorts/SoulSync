@@ -1859,7 +1859,7 @@
 
     /* Global touch targets - only standalone/action buttons, not inline.
        Round icon buttons (fixed-size circles) are excluded so the min-height
-       can't stretch them into vertical ellipses. The video dashboard's Studios
+       can't stretch them into vertical ellipses. Another page's Studios
        halves (.vst-half) are excluded because this chain's specificity beats
        their own min-height: 208px — their content is absolutely positioned, so
        "winning" here collapses each half to a 38px sliver on phones. */

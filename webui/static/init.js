@@ -1417,21 +1417,6 @@ function updateProfileIndicator() {
         }
     });
 
-    // Video side — same model. Control surfaces (Import, Settings, Automations) are
-    // admin-only; the Overlay Studio launcher is admin-only via a body class (robust
-    // to the dashboard re-rendering it); everything else is a per-profile page toggle
-    // sharing the same allowed_pages list. Help/Issues always visible.
-    const VIDEO_ADMIN_ONLY = ['video-import', 'video-settings', 'video-automations'];
-    document.querySelectorAll('.video-nav .nav-button[data-video-page]').forEach(btn => {
-        const page = btn.getAttribute('data-video-page');
-        if (page === 'video-help' || page === 'video-issues') { btn.style.display = ''; return; }
-        if (VIDEO_ADMIN_ONLY.includes(page)) { btn.style.display = currentProfile.is_admin ? '' : 'none'; return; }
-        if (currentProfile.id === 1) { btn.style.display = ''; return; }
-        const ap = currentProfile.allowed_pages;
-        btn.style.display = (!ap || ap.includes(page)) ? '' : 'none';
-    });
-    document.body.classList.toggle('video-admin', !!currentProfile.is_admin);
-
     // Toggle download capability
     if (canDownload()) {
         document.body.classList.remove('downloads-disabled');
@@ -1439,33 +1424,6 @@ function updateProfileIndicator() {
         document.body.classList.add('downloads-disabled');
     }
 
-    // Per-profile SIDE access (music | video | both): a single-side profile
-    // never sees the Music↔Video switcher — they just live on their side.
-    // Forcing the side here (boot + every profile switch) also covers a stale
-    // localStorage side from a previous profile on the same browser. The video
-    // API is enforced server-side too; this is the visible half.
-    const sides = profileAllowedSides();
-    const sideToggle = document.querySelector('.side-toggle');
-    if (sideToggle) sideToggle.style.display = sides === 'both' ? '' : 'none';
-    // Keep the pre-paint flash guard in sync: the html-level class (seeded from
-    // this cache by the inline <head> script) hides the switcher on the NEXT
-    // reload before the profile has even been fetched.
-    document.documentElement.classList.toggle('side-locked', sides !== 'both');
-    try { localStorage.setItem('ss_allowed_sides', sides); } catch (e) { /* ignore */ }
-    if (sides !== 'both' &&
-            document.body.getAttribute('data-side') !== sides &&
-            typeof window._switchAppSide === 'function') {
-        window._switchAppSide(sides, { force: true });
-    }
-}
-
-// Per-profile side access — 'music' | 'video' | 'both'. Admins always both;
-// non-admins default to music unless explicitly granted (mirrors the server's
-// get_profile resolution, so a stale payload can't widen access).
-function profileAllowedSides() {
-    if (!currentProfile || currentProfile.is_admin || currentProfile.id === 1) return 'both';
-    const s = currentProfile.allowed_sides;
-    return (s === 'video' || s === 'both') ? s : 'music';
 }
 
 // =====================
@@ -2000,15 +1958,6 @@ const PROFILE_PAGE_LABELS = {
     help: 'Help & Docs',
     settings: 'Settings',
     'artist-detail': 'Artist Detail',
-    'video-dashboard': 'Video · Dashboard',
-    'video-search': 'Video · Search',
-    'video-discover': 'Video · Discover',
-    'video-library': 'Video · Library',
-    'video-watchlist': 'Video · Watchlist',
-    'video-wishlist': 'Video · Wishlist',
-    'video-downloads': 'Video · Downloads',
-    'video-calendar': 'Video · Calendar',
-    'video-tools': 'Video · Tools',
 };
 
 function getProfilePageLabel(pageId) {
@@ -2062,9 +2011,6 @@ function getProfilePageAccessOptions(profileSettings = {}) {
             const alwaysOn = cb.dataset.alwaysOn === '1';
             options.push({
                 value: cb.value,
-                // Use the canonical label (keeps the 'Video · …' prefix) so the edit
-                // form's FLAT list stays unambiguous; the create modal groups them
-                // under Music/Video dividers with plain labels instead.
                 label: getProfilePageLabel(cb.value),
                 checked: alwaysOn ? true : (allowedSet ? allowedSet.has(cb.value) : true),
                 disabled: alwaysOn,
@@ -2089,25 +2035,6 @@ function getProfilePageAccessOptions(profileSettings = {}) {
     return options;
 }
 
-// Which side a profile page id belongs to — 'shared' pages (Help/Issues) are
-// exempt from side gating.
-function profilePageSide(pageId) {
-    if (pageId === 'help' || pageId === 'issues') return 'shared';
-    return String(pageId).startsWith('video-') ? 'video' : 'music';
-}
-
-// Grey out (and lock) the page checkboxes of a side the profile can't access.
-// Always-on boxes (Help/Issues) keep their permanent state.
-function applySidesToPageCheckboxes(checkboxes, sides) {
-    checkboxes.forEach(cb => {
-        if (cb.dataset.alwaysOn === '1') return;
-        const side = profilePageSide(cb.value);
-        const blocked = side !== 'shared' && sides !== 'both' && side !== sides;
-        cb.disabled = blocked;
-        const lbl = cb.closest('label');
-        if (lbl) lbl.style.opacity = blocked ? '0.35' : '';
-    });
-}
 
 function initProfileManagement() {
     const manageBtn = document.getElementById('manage-profiles-btn');
@@ -2146,19 +2073,6 @@ function initProfileManagement() {
     const firstSwatch = document.querySelector('.profile-color-swatch');
     if (firstSwatch) firstSwatch.classList.add('selected');
 
-    // Side access radios: greying out the excluded side's page checkboxes live.
-    // Default (from the template) is Music only — the shipped default.
-    const sideRadios = document.querySelectorAll('input[name="new-profile-sides"]');
-    const _createPageBoxes = () => Array.from(document.querySelectorAll('#new-profile-allowed-pages input[type="checkbox"]'));
-    const _selectedSides = () => {
-        const r = document.querySelector('input[name="new-profile-sides"]:checked');
-        return r ? r.value : 'music';
-    };
-    sideRadios.forEach(r => r.addEventListener('change', () => {
-        applySidesToPageCheckboxes(_createPageBoxes(), _selectedSides());
-    }));
-    applySidesToPageCheckboxes(_createPageBoxes(), _selectedSides());
-
     if (createBtn) {
         createBtn.onclick = async () => {
             const name = document.getElementById('new-profile-name').value.trim();
@@ -2185,7 +2099,6 @@ function initProfileManagement() {
                     home_page: homePage,
                     allowed_pages: allowedPages,
                     can_download: canDl,
-                    allowed_sides: _selectedSides()
                 })
             });
             const data = await res.json();
@@ -2197,10 +2110,6 @@ function initProfileManagement() {
                 document.getElementById('new-profile-home-page').value = '';
                 pageCheckboxes.forEach(cb => cb.checked = true);
                 document.getElementById('new-profile-can-download').checked = true;
-                // Reset side access to the Music-only default.
-                const musicRadio = document.querySelector('input[name="new-profile-sides"][value="music"]');
-                if (musicRadio) { musicRadio.checked = true; }
-                applySidesToPageCheckboxes(_createPageBoxes(), 'music');
                 loadProfileManageList();
                 // Show admin PIN section if >1 profiles and admin has no PIN
                 checkAdminPinRequired();
@@ -2551,38 +2460,10 @@ function showProfileEditForm(profileId, currentName, currentColor, currentAvatar
     });
     form.appendChild(homeSelect);
 
-    // Admin-only settings: side access, allowed pages & can_download
+    // Admin-only settings: allowed pages & can_download
     let pageCheckboxes = [];
     let canDlCheckbox = null;
-    let selectedSides = null;
     if (isAdmin && !isEditingAdmin) {
-        // Side access — music | video | both, never nothing.
-        selectedSides = (profileSettings.allowed_sides === 'video' || profileSettings.allowed_sides === 'both')
-            ? profileSettings.allowed_sides : 'music';
-        const sidesLabel = document.createElement('label');
-        sidesLabel.className = 'profile-settings-label';
-        sidesLabel.textContent = 'Side Access';
-        form.appendChild(sidesLabel);
-
-        const sidesRow = document.createElement('div');
-        sidesRow.className = 'profile-sides-picker';
-        [['music', 'Music only'], ['video', 'Video only'], ['both', 'Music + Video']].forEach(([value, label]) => {
-            const lbl = document.createElement('label');
-            const r = document.createElement('input');
-            r.type = 'radio';
-            r.name = 'edit-profile-sides';
-            r.value = value;
-            r.checked = value === selectedSides;
-            r.addEventListener('change', () => {
-                selectedSides = value;
-                applySidesToPageCheckboxes(pageCheckboxes, selectedSides);
-            });
-            lbl.appendChild(r);
-            lbl.appendChild(document.createTextNode(' ' + label));
-            sidesRow.appendChild(lbl);
-        });
-        form.appendChild(sidesRow);
-
         const apLabel = document.createElement('label');
         apLabel.className = 'profile-settings-label';
         apLabel.textContent = 'Page Access';
@@ -2604,7 +2485,6 @@ function showProfileEditForm(profileId, currentName, currentColor, currentAvatar
             pageCheckboxes.push(cb);
         });
         form.appendChild(apContainer);
-        applySidesToPageCheckboxes(pageCheckboxes, selectedSides);
 
         const dlLabel = document.createElement('label');
         dlLabel.className = 'profile-checkbox-label';
@@ -2637,7 +2517,6 @@ function showProfileEditForm(profileId, currentName, currentColor, currentAvatar
             const allChecked = editablePageCheckboxes.every(cb => cb.checked);
             payload.allowed_pages = allChecked ? null : editablePageCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
             payload.can_download = canDlCheckbox ? canDlCheckbox.checked : true;
-            if (selectedSides) payload.allowed_sides = selectedSides;
         }
 
         try {
@@ -2656,7 +2535,6 @@ function showProfileEditForm(profileId, currentName, currentColor, currentAvatar
                     if (payload.home_page !== undefined) currentProfile.home_page = payload.home_page;
                     if (payload.allowed_pages !== undefined) currentProfile.allowed_pages = payload.allowed_pages;
                     if (payload.can_download !== undefined) currentProfile.can_download = payload.can_download;
-                    if (payload.allowed_sides !== undefined) currentProfile.allowed_sides = payload.allowed_sides;
                     updateProfileIndicator();
                     notifyProfileContextChanged();
                 }
@@ -2946,7 +2824,7 @@ const _DEEPLINK_VALID_PAGES = new Set([
     'dashboard', 'sync', 'search', 'discover', 'automations',
     'library', 'import', 'settings', 'help', 'issues', 'stats', 'watchlist',
     'wishlist', 'active-downloads', 'artist-detail', 'playlist-explorer',
-    'hydrabase', 'tools', 'chat'
+    'hydrabase', 'tools'
 ]);
 
 function _getPageFromPath() {
@@ -3367,9 +3245,6 @@ async function loadPageData(pageId) {
             // host and never calls loadPageData for it.
             case 'automations':
                 await loadAutomations();
-                break;
-            case 'chat':
-                if (window.ChatPage) window.ChatPage.open();
                 break;
             case 'help':
                 initializeDocsPage();

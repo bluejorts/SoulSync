@@ -10,7 +10,6 @@ import {
   fetchLabels,
   fetchLibraryCheck,
   lookupById,
-  streamVideoSearch,
 } from './-search.api';
 
 /** NDJSON body from a list of chunk payloads, optionally split mid-line. */
@@ -63,64 +62,6 @@ describe('fetchEnhancedSearch', () => {
     const promise = fetchEnhancedSearch('aphex', 'spotify', controller.signal);
     controller.abort();
     await expect(promise).rejects.toThrow();
-  });
-});
-
-describe('streamVideoSearch', () => {
-  it('reports each chunk cumulatively as it arrives', async () => {
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () =>
-        ndjson([
-          '{"type":"videos","data":[{"video_id":"a"}]}\n',
-          '{"type":"videos","data":[{"video_id":"b"}]}\n',
-        ]),
-      ),
-    );
-
-    const chunks: number[] = [];
-    const all = await streamVideoSearch('aphex', (videos) => chunks.push(videos.length));
-    // Progressive: the grid fills in rather than appearing all at once.
-    expect(chunks).toEqual([1, 2]);
-    expect(all.map((v) => v.video_id)).toEqual(['a', 'b']);
-  });
-
-  it('holds back a line split across two chunks', async () => {
-    // The obvious way to break NDJSON is to parse a fragment.
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () =>
-        ndjson(['{"type":"videos","data":[{"video_id"', ':"split"}]}\n']),
-      ),
-    );
-    const all = await streamVideoSearch('aphex', () => {});
-    expect(all.map((v) => v.video_id)).toEqual(['split']);
-  });
-
-  it('skips a malformed line without killing the stream', async () => {
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () =>
-        ndjson(['not json\n', '{"type":"videos","data":[{"video_id":"ok"}]}\n']),
-      ),
-    );
-    const all = await streamVideoSearch('aphex', () => {});
-    expect(all.map((v) => v.video_id)).toEqual(['ok']);
-  });
-
-  it('ignores chunks that are not videos', async () => {
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () =>
-        ndjson(['{"type":"progress","data":[{"video_id":"nope"}]}\n']),
-      ),
-    );
-    expect(await streamVideoSearch('aphex', () => {})).toEqual([]);
-  });
-
-  it('returns nothing on a failed response rather than throwing', async () => {
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () =>
-        HttpResponse.json({}, { status: 500 }),
-      ),
-    );
-    await expect(streamVideoSearch('aphex', () => {})).resolves.toEqual([]);
   });
 });
 

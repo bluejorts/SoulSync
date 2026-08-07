@@ -182,12 +182,6 @@ def get_debug_info():
                     'path': p,
                     'exists': os.path.isdir(p),
                 })
-    # Music videos directory
-    music_videos_path = config_manager.get('library.music_videos_path', '')
-    if music_videos_path:
-        info['paths']['music_videos_path'] = music_videos_path
-        info['paths']['music_videos_path_exists'] = os.path.isdir(music_videos_path)
-
     # Services. `_status_cache` only carries 'media_server' and 'soulseek'
     # (no 'spotify' key) so anything we used to read from `spotify_cache`
     # silently defaulted to the missing-value fallback — that's the

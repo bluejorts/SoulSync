@@ -24,8 +24,6 @@ function renderResults(props: Partial<Parameters<typeof SearchResults>[0]> = {})
       albums={[]}
       tracks={[]}
       labels={[]}
-      videos={[]}
-      videoProgress={{}}
       ownership={EMPTY_OWNERSHIP}
       artistImages={{}}
       onArtistHref={(a) => `/artist-detail/spotify/${a.id}`}
@@ -33,7 +31,6 @@ function renderResults(props: Partial<Parameters<typeof SearchResults>[0]> = {})
       onAlbumClick={vi.fn()}
       onTrackClick={vi.fn()}
       onTrackPlay={vi.fn()}
-      onVideoDownload={vi.fn()}
       {...props}
     />,
   );
@@ -163,9 +160,8 @@ describe('SearchResults', () => {
     expect(metas).toEqual(['Aphex Twin • 2001', 'Aphex Twin • N/A']);
   });
 
-  it('hides labels under soulseek as well as youtube_videos', () => {
-    // Labels are fetched additively, so both sources need the section hidden
-    // explicitly (search.js:429-434).
+  it('hides labels under soulseek', () => {
+    // Labels are fetched additively, so the section needs hiding explicitly.
     renderResults({ activeSource: 'soulseek', labels: [{ id: 'l1', name: 'Warp' }] });
     expect(document.getElementById('enh-labels-section')).toBeNull();
   });
@@ -388,34 +384,4 @@ describe('SearchResults', () => {
     expect(document.getElementById('enh-db-artists-section')).toBeNull();
   });
 
-  it('shows ONLY the video grid for the youtube_videos source', () => {
-    // search.js:178-186 hides all six sections for this source. Labels matter
-    // most: they are fetched additively, so without the rule a video search
-    // sprouts a Labels section the vanilla never showed.
-    renderResults({
-      activeSource: 'youtube_videos',
-      videos: [{ video_id: 'v1', title: 'Clip', channel: 'Ch', duration: 215 }],
-      labels: [{ id: 'l1', name: 'Warp' }],
-      albums: [album()],
-      artists: [{ id: 'sp1', name: 'Found', source: 'spotify' }],
-    });
-
-    expect(document.getElementById('enh-videos-section')).not.toBeNull();
-    // Seconds, not milliseconds — a different unit from track durations.
-    expect(screen.getByText('3:35')).toBeInTheDocument();
-    expect(document.getElementById('enh-labels-section')).toBeNull();
-    expect(document.getElementById('enh-albums-section')).toBeNull();
-    expect(document.querySelector('.enh-artists-wrapper')).toBeNull();
-  });
-
-  it('says so when a video search found nothing, rather than going blank', () => {
-    renderResults({ activeSource: 'youtube_videos', videos: [] });
-    expect(document.getElementById('enh-videos-section')).not.toBeNull();
-    expect(screen.getByText('No music videos found')).toBeInTheDocument();
-  });
-
-  it('never renders a video grid under a metadata source', () => {
-    renderResults({ albums: [album()] });
-    expect(document.getElementById('enh-videos-section')).toBeNull();
-  });
 });

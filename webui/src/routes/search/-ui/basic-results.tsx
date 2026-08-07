@@ -98,21 +98,8 @@ export function BasicResults({
   );
 }
 
-/** `Shared by <uploader>` — the button chat.js's delegated handler listens for. */
 function Uploader({ username }: { username: string }) {
-  return (
-    <>
-      Shared by{' '}
-      <button
-        type="button"
-        className="chat-user-link"
-        data-chat-msg-user={username}
-        title="Message this user on Soulseek"
-      >
-        {username || 'Unknown'}
-      </button>
-    </>
-  );
+  return <>Shared by {username || 'Unknown'}</>;
 }
 
 function AlbumCard({

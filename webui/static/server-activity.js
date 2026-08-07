@@ -1,5 +1,5 @@
 /*
- * SoulSync — Live Server Activity (app-wide, music + video).
+ * SoulSync — Live Server Activity (app-wide).
  *
  * A Tautulli-style live view of every active Plex stream: who's playing what,
  * direct play vs transcode (with the codec line), bandwidth, and progress.
@@ -384,16 +384,6 @@
             if (tb) { setTab(tb.getAttribute('data-sact-tab')); return; }
             var sb = e.target.closest('[data-sact-stop]');
             if (sb) { openStop(sb.getAttribute('data-sact-stop'), sb.getAttribute('data-sact-title')); return; }
-            // Click a card → jump to that movie/show's page inside SoulSync.
-            var lk = e.target.closest('.sact-card--link');
-            if (lk) {
-                var id = lk.getAttribute('data-link-id');
-                close();
-                if (window.SoulSyncVideo && window.SoulSyncVideo.openDetail)
-                    window.SoulSyncVideo.openDetail({ kind: lk.getAttribute('data-link-kind'),
-                        id: parseInt(id, 10) || id, source: lk.getAttribute('data-link-source') || 'library' });
-                return;
-            }
         });
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) close(); });
     }

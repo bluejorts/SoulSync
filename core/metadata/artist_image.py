@@ -78,7 +78,7 @@ def _lookup_artist_image_by_name(name: str) -> Optional[str]:
     if not name:
         return None
 
-    skip_sources = {'musicbrainz', 'soulseek', 'youtube_videos', 'hydrabase'}
+    skip_sources = {'musicbrainz', 'soulseek', 'hydrabase'}
     for source in metadata_registry.get_source_priority(metadata_registry.get_primary_source()):
         if source in skip_sources:
             continue
@@ -208,7 +208,7 @@ _SOURCE_ID_COLUMNS = {
 }
 
 # Sources that can't produce an artist photo (or aren't image services at all).
-_CANDIDATE_SKIP_SOURCES = {'musicbrainz', 'soulseek', 'youtube_videos', 'hydrabase'}
+_CANDIDATE_SKIP_SOURCES = {'musicbrainz', 'soulseek', 'hydrabase'}
 
 # TheAudioDB isn't in the metadata priority chain (it's an enrichment worker,
 # not a browse source) but it has excellent keyless artist photos — the picker

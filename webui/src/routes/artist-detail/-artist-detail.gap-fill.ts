@@ -89,7 +89,6 @@ export const SOURCE_LABEL_TEXT: Record<string, string> = {
   musicbrainz: 'MusicBrainz',
   jiosaavn: 'JioSaavn',
   bandcamp: 'Bandcamp',
-  youtube_videos: 'Music Videos',
   soulseek: 'Basic Search',
 };
 

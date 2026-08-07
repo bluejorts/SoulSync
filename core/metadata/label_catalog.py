@@ -1,6 +1,6 @@
 """Record-label catalog — the data layer behind the labels watchlist.
 
-A label is monitored like the video-side studio watchlist and displayed like
+A label is monitored like an artist watchlist entry and displayed like
 an artist's discography. Its catalog is a list of RELEASES that belong to
 many different artists — so every item resolves to a REAL artist for
 acquisition/tagging/filing, NEVER the label.

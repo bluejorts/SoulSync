@@ -7,7 +7,7 @@ via configure() to dodge circular imports with web_server. It reads only the
 new watchlist_labels table + the keyless MusicBrainz catalog layer
 (core/metadata/label_catalog) — it touches no existing route or table.
 
-A label is monitored like the video-side studio watchlist and displayed like
+A label is monitored like an artist watchlist entry and displayed like
 an artist's discography: its catalog is a list of releases that each resolve
 to a REAL artist (never the label), grouped by artist for display.
 """

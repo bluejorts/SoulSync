@@ -136,27 +136,22 @@ def test_downloads_sections_filter_malformed_bubbles():
 
 
 def test_library_downloads_section_anchors_on_the_grid_not_a_class_query():
-    """#1038 round two (named by the improved toast): insertBefore threw because
-    document.querySelector('.library-content') matched the VIDEO library's copy
-    of the class (first in the DOM) while #library-artists-grid lives in the
-    music one. The section must derive its container FROM the grid."""
+    """#1038 round two (named by the improved toast): insertBefore once threw
+    because a global document.querySelector('.library-content') could match a
+    different page's copy of the class. The section must derive its container
+    FROM the grid."""
     fn = _HELPERS_JS.split("function showLibraryDownloadsSection")[1].split("function createArtistBubbleCard")[0]
     assert "getElementById('library-artists-grid')" in fn
     assert "artistGrid.parentElement" in fn
-    # The ambiguity is still real, it just spans two renderers now: index.html
-    # carries the VIDEO library's .library-content, and the React music library
-    # renders its own. A class query would still be able to hit the wrong one.
-    index = (_ROOT / "webui" / "index.html").read_text(encoding="utf-8")
     react_page = (
         _ROOT / "webui" / "src" / "routes" / "library" / "-ui" / "library-page.tsx"
     ).read_text(encoding="utf-8")
-    assert index.count('class="library-content"') >= 1, "video library lost its .library-content"
     assert 'className="library-content"' in react_page, "music library lost its .library-content"
 
     # The React library page renders a dedicated host and is preferred when
     # present, so a querySelector is no longer disqualifying on its own — but it
-    # must target a selector that CANNOT match the video side. Anything matching
-    # by class (.library-content and friends) reopens #1038.
+    # must target a selector that cannot match another page's copy. Anything
+    # matching by class (.library-content and friends) reopens #1038.
     queried = re.findall(r"document\.querySelector\((['\"])(.+?)\1\)", fn)
     assert [sel for _, sel in queried] == ["[data-library-downloads-host]"], (
         f"only the unique React host may be queried here, got {queried}"
@@ -165,8 +160,7 @@ def test_library_downloads_section_anchors_on_the_grid_not_a_class_query():
 
 def test_react_library_downloads_host_is_unique_to_the_music_page():
     """The anchor above is only safe while exactly one page renders the host —
-    a second one (notably a video-side copy) would recreate #1038 with a
-    different selector."""
+    a second one would recreate #1038 with a different selector."""
     hosts = [
         path
         for path in _ROOT.joinpath("webui").rglob("*")

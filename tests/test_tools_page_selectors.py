@@ -238,14 +238,12 @@ def test_tools_closure_class_selectors_resolve():
 
 
 def test_repair_hero_selector_is_scoped_to_the_music_tools_page():
-    """`.tools-maintenance-hero` exists TWICE — video tools uses it too, and comes
-    first in the document. An unscoped query lands on the wrong hero."""
+    """The music maintenance hero is rendered by React; the enrichment.js
+    query stays scoped to #tools-page so it can never land on another page's
+    copy of the class."""
     html = _html()
-    # Since P7 only the VIDEO hero is markup; the music one is rendered by React.
-    # The scoping still matters: the video hero is in the document either way, so
-    # an unscoped query from enrichment.js would land on it.
-    assert html.count('class="tools-maintenance-hero"') == 1, (
-        "expected exactly one maintenance hero in markup (video); the music one is React"
+    assert html.count('class="tools-maintenance-hero"') == 0, (
+        "no maintenance hero belongs in markup; the music one is React"
     )
     assert 'className="tools-maintenance-hero"' in _tools_region(), (
         "the React maintenance hero must keep this class — openRepairModal scrolls to it"

@@ -6,7 +6,6 @@ import type {
   SearchAlbum,
   SearchLabel,
   SearchTrack,
-  SearchVideo,
 } from './-search.types';
 
 import { visibleSources } from './-search.helpers';
@@ -33,60 +32,6 @@ export function fetchEnhancedSearch(
   return readJson<EnhancedSearchResponse>(
     apiClient.post('enhanced-search', { json, timeout: false, signal }),
   );
-}
-
-/**
- * YouTube music videos, which arrive as NDJSON rather than one JSON body.
- *
- * The server emits newline-delimited `{type:'videos', data:[...]}` chunks so the
- * grid can fill in progressively; `onChunk` is called per chunk with the
- * cumulative list. A partial trailing line is held back until its newline
- * arrives — splitting mid-object and JSON.parsing the fragment is the obvious
- * way to break this.
- */
-export async function streamVideoSearch(
-  query: string,
-  onChunk: (videos: SearchVideo[]) => void,
-  signal?: AbortSignal,
-): Promise<SearchVideo[]> {
-  const response = await fetch('/api/enhanced-search/source/youtube_videos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
-    signal,
-  });
-  if (!response.ok || !response.body) return [];
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const videos: SearchVideo[] = [];
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done || signal?.aborted) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split('\n');
-    // The last element is either '' (clean break) or a partial object.
-    buffer = lines.pop() ?? '';
-
-    let touched = false;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const parsed = JSON.parse(line) as { type?: string; data?: SearchVideo[] };
-        if (parsed.type === 'videos' && Array.isArray(parsed.data)) {
-          videos.push(...parsed.data);
-          touched = true;
-        }
-      } catch {
-        // A malformed line is skipped rather than killing the whole stream.
-      }
-    }
-    if (touched && !signal?.aborted) onChunk([...videos]);
-  }
-  return videos;
 }
 
 /** Link/ID resolver — a pasted MusicBrainz id or provider URL. */

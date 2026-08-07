@@ -1663,7 +1663,7 @@ const DOCS_SECTIONS = [
             </div>
             <div class="docs-subsection" id="vid-switch">
                 <h3 class="docs-subsection-title">Switching Sides</h3>
-                <p class="docs-text">Use the <strong>side switcher</strong> in the sidebar to flip between the Music and Video apps. Each side has its own navigation, its own pages, and its own settings. A handful of pages are <strong>shared</strong> across both sides &mdash; <strong>Settings</strong>, <strong>Chat</strong>, <strong>Issues</strong>, and this <strong>Help &amp; Docs</strong> page &mdash; so you land on the same page no matter which side you were on.</p>
+                <p class="docs-text">The sidebar navigation covers every page &mdash; <strong>Settings</strong>, <strong>Issues</strong>, and this <strong>Help &amp; Docs</strong> page are always available.</p>
                 ${docsImg('video-side-switch.jpg', 'Switching between the Music and Video sides')}
             </div>
             <div class="docs-subsection" id="vid-server">
@@ -3121,9 +3121,6 @@ function initializeDocsPage() {
                 text += `Input:    ${data.paths?.download_path || '(not set)'} [${pathStatus(data.paths?.download_path_exists, data.paths?.download_path_writable)}]\n`;
                 text += `Output:   ${data.paths?.transfer_folder || '(not set)'} [${pathStatus(data.paths?.transfer_folder_exists, data.paths?.transfer_folder_writable)}]\n`;
                 text += `Import:   ${data.paths?.staging_folder ? data.paths.staging_folder + ' [' + (data.paths.staging_folder_exists ? ck + ' ok' : ex + ' missing') + ']' : '(not configured — optional)'}\n`;
-                if (data.paths?.music_videos_path) {
-                    text += `Videos:   ${data.paths.music_videos_path} [${data.paths.music_videos_path_exists ? ck + ' ok' : ex + ' missing'}]\n`;
-                }
                 if (data.paths?.music_library_paths?.length) {
                     text += `Library Paths:\n`;
                     data.paths.music_library_paths.forEach(p => {

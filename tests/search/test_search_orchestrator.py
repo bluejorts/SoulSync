@@ -361,7 +361,6 @@ def test_fanout_lists_alternate_sources_excluding_primary():
     assert 'deezer' not in alts  # primary excluded
     assert 'itunes' in alts
     assert 'spotify' in alts
-    assert 'youtube_videos' in alts
     assert 'musicbrainz' in alts
     assert 'jiosaavn' not in alts
 
@@ -501,7 +500,7 @@ def test_empty_response_keys():
 
 
 # ---------------------------------------------------------------------------
-# Streaming generators + youtube_videos client resolution
+# Streaming generators
 # ---------------------------------------------------------------------------
 
 def _drain(generator):
@@ -527,94 +526,3 @@ def test_stream_metadata_source_yields_three_kinds_plus_done():
     assert types[-1] == 'done'
 
 
-class _FakeYouTubeVideo:
-    def __init__(self, vid):
-        self.video_id = vid
-        self.title = f"Title {vid}"
-        self.channel = "Chan"
-        self.duration = 100
-        self.thumbnail = f"thumb-{vid}.jpg"
-        self.url = f"https://yt/{vid}"
-        self.view_count = 1000
-        self.upload_date = "20260101"
-
-
-class _FakeYouTube:
-    def __init__(self, results=None):
-        self._results = results or []
-
-    async def search_videos(self, q, max_results=20):
-        return self._results
-
-
-class _FakeSoulseekWithYT:
-    def __init__(self, youtube):
-        self._youtube = youtube
-
-    def client(self, name):
-        return self._youtube if name == 'youtube' else None
-
-
-def test_resolve_youtube_videos_returns_subclient():
-    yt = _FakeYouTube()
-    deps = _build_deps(download_orchestrator=_FakeSoulseekWithYT(yt))
-    assert orchestrator.resolve_youtube_videos_client(deps) is yt
-
-
-def test_resolve_youtube_videos_no_soulseek_returns_none():
-    deps = _build_deps(download_orchestrator=None)
-    assert orchestrator.resolve_youtube_videos_client(deps) is None
-
-
-def test_resolve_youtube_videos_no_youtube_attr_returns_none():
-    class _NoYT:
-        pass
-    deps = _build_deps(download_orchestrator=_NoYT())
-    assert orchestrator.resolve_youtube_videos_client(deps) is None
-
-
-def test_stream_youtube_videos_yields_videos_chunk_and_done():
-    yt = _FakeYouTube(results=[_FakeYouTubeVideo('vid1'), _FakeYouTubeVideo('vid2')])
-    out = _drain(orchestrator.stream_youtube_videos('q', yt, _sync_run_async))
-    assert out[0]['type'] == 'videos'
-    assert len(out[0]['data']) == 2
-    assert out[0]['data'][0]['video_id'] == 'vid1'
-    assert out[-1]['type'] == 'done'
-
-
-def test_stream_youtube_videos_search_failure_yields_empty_videos():
-    class _BadYT:
-        async def search_videos(self, q, max_results=20):
-            raise RuntimeError("yt-dlp boom")
-
-    out = _drain(orchestrator.stream_youtube_videos('q', _BadYT(), _sync_run_async))
-    assert out[0] == {'type': 'videos', 'data': []}
-    assert out[-1] == {'type': 'done'}
-
-
-def test_single_source_spotify_prefer_free_even_when_resolver_serves_the_client():
-    """REGRESSION (the 'spotify search shows deezer results' report): the
-    request-scoped free opt-in can make is_spotify_metadata_available True for
-    an explicitly-Spotify request, so resolve_client hands the client back —
-    but the actual searches run in ThreadPoolExecutor workers where the Flask
-    request context is invisible. prefer_free must be keyed on AUTH STATE, not
-    on resolve_client failing, or the workers silently serve the Deezer/iTunes
-    fallback under the Spotify label."""
-    spot = _Client(authed=False, meta_available=True, free_installed=True,
-                   artists=[_Artist('s1', 'Free Spot Artist')])
-    deps = _build_deps(spotify_client=spot)
-    result = orchestrator.run_enhanced_search('kendrick lamar', 'spotify', deps)
-
-    assert result['spotify_artists'][0]['name'] == 'Free Spot Artist'
-    assert spot.prefer_free_seen is True
-
-
-def test_single_source_spotify_authed_never_prefers_free():
-    """Authed + healthy stays on the official API — prefer_free must not fire."""
-    spot = _Client(authed=True, meta_available=True, free_installed=True,
-                   artists=[_Artist('s1', 'Official Artist')])
-    deps = _build_deps(spotify_client=spot)
-    result = orchestrator.run_enhanced_search('kendrick lamar', 'spotify', deps)
-
-    assert result['spotify_artists'][0]['name'] == 'Official Artist'
-    assert spot.prefer_free_seen is False

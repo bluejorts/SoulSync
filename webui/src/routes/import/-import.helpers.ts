@@ -23,7 +23,6 @@ const IMPORT_SOURCE_LABELS: Record<string, string> = {
   playlist: 'Playlist',
   soulseek: 'Basic Search',
   spotify: 'Spotify',
-  youtube_videos: 'Music Videos',
 };
 
 export function getStagingFileKey(file: ImportStagingFile): string {

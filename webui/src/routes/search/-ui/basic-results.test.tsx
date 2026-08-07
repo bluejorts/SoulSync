@@ -136,21 +136,16 @@ describe('track cards', () => {
     expect(actions.onMatchedTrack).toHaveBeenCalledWith(expect.anything(), 1);
   });
 
-  it('renders the uploader as chat.js"s delegated message button', () => {
-    // chat.js binds ONE capture-phase listener on document for
-    // [data-chat-msg-user]; the attribute is the whole contract.
+  it('renders the uploader as plain text', () => {
     const { container } = renderResults([track({ username: 'somepeer' })]);
-    const button = container.querySelector('.track-uploader .chat-user-link') as HTMLElement;
-    expect(button.getAttribute('data-chat-msg-user')).toBe('somepeer');
-    expect(button.textContent).toBe('somepeer');
-    expect(button.getAttribute('title')).toBe('Message this user on Soulseek');
+    const uploader = container.querySelector('.track-uploader') as HTMLElement;
+    expect(uploader.textContent).toContain('somepeer');
   });
 
-  it('shows Unknown for a missing uploader but sends no name to chat', () => {
+  it('shows Unknown for a missing uploader', () => {
     const { container } = renderResults([track({ username: '' })]);
-    const button = container.querySelector('.chat-user-link') as HTMLElement;
-    expect(button.textContent).toBe('Unknown');
-    expect(button.getAttribute('data-chat-msg-user')).toBe('');
+    const uploader = container.querySelector('.track-uploader') as HTMLElement;
+    expect(uploader.textContent).toContain('Unknown');
   });
 });
 

@@ -36,7 +36,6 @@ import { useArtistImages } from '../-search.use-artist-images';
 import { activeResults, getPersistedQuery, useSearchController } from '../-search.use-controller';
 import { useDismissOnOutsideClick } from '../-search.use-dismiss';
 import { useLibraryCheck } from '../-search.use-library-check';
-import { useVideoDownloads } from '../-search.use-video-downloads';
 import { BasicSearch } from './basic-search';
 import { SearchBar } from './search-bar';
 import { SearchResults } from './search-results';
@@ -121,7 +120,6 @@ export function SearchPage() {
 
   const ownership = useLibraryCheck(results.albums, results.tracks);
   const artistImages = useArtistImages(results.db_artists, results.artists, state.activeSource);
-  const { progress: videoProgress, download: downloadVideo } = useVideoDownloads();
 
   /**
    * Resolve a pasted link or id on its owning source (#775).
@@ -196,8 +194,7 @@ export function SearchPage() {
     results.db_artists.length +
       results.artists.length +
       results.albums.length +
-      results.tracks.length +
-      results.videos.length >
+      results.tracks.length >
     0;
   useEffect(() => {
     const trimmed = state.query.trim();
@@ -354,8 +351,6 @@ export function SearchPage() {
                   albums={results.albums}
                   tracks={results.tracks}
                   labels={labels}
-                  videos={results.videos}
-                  videoProgress={videoProgress}
                   ownership={ownership}
                   artistImages={artistImages}
                   onArtistHref={onArtistHref}
@@ -368,7 +363,6 @@ export function SearchPage() {
                     if (row) playOwnedTrack(row);
                     else void streamSearchTrack(track);
                   }}
-                  onVideoDownload={downloadVideo}
                 />
               </div>
             </div>

@@ -15,21 +15,12 @@ import pytest
 from core.server_activity import get_activity, normalize_session
 
 
-class _EmptyVDB:
-    def items_by_server_ids(self, ids, server_source=None):
-        return []
-
-    def find_library_ref_by_title(self, kind, title, year=None):
-        return None
-
-
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
-    """Isolate get_activity tests from any real Jellyfin config + video library in
-    the env. Jellyfin/link-specific tests override these."""
+    """Isolate get_activity tests from any real Jellyfin config in the env.
+    Jellyfin-specific tests override this."""
     import core.server_activity as sa
     monkeypatch.setattr(sa, "_jellyfin_activity", lambda db=None: ([], None))
-    monkeypatch.setattr("api.video.get_video_db", lambda: _EmptyVDB())
 
 
 def _media(res="1080", vcodec="hevc", acodec="eac3", bitrate=12000, container="mkv"):
@@ -366,81 +357,21 @@ def test_activity_merges_plex_and_jellyfin(monkeypatch):
     assert "Heat" in titles and "Dune" in titles
 
 
-# ── click-through: resolve a stream to its SoulSync library page ─────────────
+# ── link scratch fields ──────────────────────────────────────────────────────
 def test_normalize_captures_link_ids():
     m = normalize_session(_movie(ratingKey=100))
-    assert m["_link_sid"] == "100"                    # movie links to itself
-    ep = normalize_session(_movie(type="episode", grandparentRatingKey=200))
-    assert ep["_link_sid"] == "200"                   # episode links to its SHOW
+    assert m["_link_sid"] == "100"
     tr = normalize_session(_movie(type="track"))
-    assert tr["_link_sid"] == ""                       # music: no video detail to link
+    assert tr["_link_sid"] == ""
 
 
-def test_resolve_library_links(monkeypatch):
+def test_resolve_library_links_strips_scratch_fields():
     import core.server_activity as sa
-
-    class _VDB:
-        def items_by_server_ids(self, ids, server_source=None):
-            return [{"kind": "movie", "id": 7, "tmdb_id": 603, "server_id": "100", "title": "Heat"},
-                    {"kind": "show", "id": 9, "tmdb_id": 1396, "server_id": "200", "title": "BB"}]
-    monkeypatch.setattr("api.video.get_video_db", lambda: _VDB())
-    sessions = [
-        {"media_type": "movie", "_link_sid": "100", "link": None},
-        {"media_type": "episode", "_link_sid": "200", "link": None},
-        {"media_type": "movie", "_link_sid": "999", "link": None},   # not owned
-    ]
-    sa._resolve_library_links(sessions)
-    assert sessions[0]["link"] == {"kind": "movie", "id": 7, "source": "library"}
-    assert sessions[1]["link"] == {"kind": "show", "id": 9, "source": "library"}
-    assert sessions[2]["link"] is None                # not in library → not clickable
-    assert all("_link_sid" not in s for s in sessions)   # internal fields cleaned up
-    assert all("_link_title" not in s for s in sessions)
-
-
-def test_resolve_falls_back_to_title_year_when_id_misses(monkeypatch):
-    import core.server_activity as sa
-
-    class _VDB:
-        def items_by_server_ids(self, ids, server_source=None):
-            return []   # id doesn't line up (re-scan / different server_source)
-
-        def find_library_ref_by_title(self, kind, title, year=None):
-            if kind == "movie" and title == "Heat" and year == 1995:
-                return 42
-            return None
-    monkeypatch.setattr("api.video.get_video_db", lambda: _VDB())
-    sessions = [{"media_type": "movie", "_link_sid": "nope", "_link_title": "Heat",
-                 "_link_year": 1995, "link": None}]
-    sa._resolve_library_links(sessions)
-    assert sessions[0]["link"] == {"kind": "movie", "id": 42, "source": "library"}
-
-
-def test_normalize_captures_tmdb_from_guids():
-    guids = [NS(id="imdb://tt123"), NS(id="tmdb://949?lang=en"), NS(id="tvdb://5")]
-    m = normalize_session(_movie(guids=guids))
-    assert m["_link_tmdb"] == "949"
-
-
-def test_resolve_falls_back_to_tmdb_when_not_owned(monkeypatch):
-    """Not in the SoulSync library → link to the TMDB preview page so anything on
-    the server is still clickable (works even with no video library at all)."""
-    import core.server_activity as sa
-    monkeypatch.setattr("api.video.get_video_db", lambda: _EmptyVDB())    # nothing owned
-    sessions = [{"media_type": "movie", "_link_sid": "x", "_link_title": "Heat",
+    sessions = [{"media_type": "movie", "_link_sid": "100", "_link_title": "Heat",
                  "_link_year": 1995, "_link_tmdb": "949", "link": None}]
     sa._resolve_library_links(sessions)
-    assert sessions[0]["link"] == {"kind": "movie", "id": "949", "source": "tmdb"}
-
-
-def test_resolve_links_kind_mismatch_is_ignored(monkeypatch):
-    import core.server_activity as sa
-    # a movie ratingKey that (bizarrely) matches a show row must NOT link
-    monkeypatch.setattr("api.video.get_video_db", lambda: type("D", (), {
-        "items_by_server_ids": lambda s, ids, server_source=None:
-            [{"kind": "show", "id": 3, "tmdb_id": 1, "server_id": "5", "title": "X"}]})())
-    sessions = [{"media_type": "movie", "_link_sid": "5", "link": None}]
-    sa._resolve_library_links(sessions)
-    assert sessions[0]["link"] is None
+    assert sessions[0]["link"] is None                    # cards are not clickable
+    assert all(not k.startswith("_link_") for k in sessions[0])
 
 
 # ── frontend wiring ──────────────────────────────────────────────────────────
@@ -480,11 +411,6 @@ def test_ui_is_wired():
     assert "function actKey" in js and "_actKeys" in js       # key-diffed render (no flicker)
     assert "sact-eq" in js and ".sact-eq" in css              # music equalizer
     assert ".sact-head-dot" in css and "@keyframes sactCardIn" in css
-    # click-through to the SoulSync detail page
-    assert "sact-card--link" in js and "SoulSyncVideo.openDetail" in js
-    assert "data-link-kind" in js and ".sact-card--link" in css
-    vs = (root / "webui" / "static" / "video" / "video-side.js").read_text(encoding="utf-8")
-    assert "window.SoulSyncVideo.openDetail" in vs and "persistSide('video')" in vs
 
 
 def test_web_server_registers_the_routes():

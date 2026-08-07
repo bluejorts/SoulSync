@@ -83,12 +83,6 @@ function debouncedAutoSaveSettings() {
     // fields on load — those aren't user edits and must not trigger a full
     // save (which re-initializes every backend service client).
     if (window._suppressSettingsAutoSave) return;
-    // ISOLATION: the video side reuses this shared settings page, so editing a
-    // VIDEO field (TMDB key, region, autoplay…) would otherwise fire this MUSIC
-    // auto-save — which reads the server toggle from the DOM and would persist
-    // active_media_server, letting the video side change the music server. Video
-    // settings save themselves via /api/video/*; never auto-save music here.
-    if (document.body.getAttribute('data-side') === 'video') return;
     // #879: never auto-save while the last settings load failed — the form is
     // showing defaults, not the real config, so saving would wipe it.
     if (window._settingsLoadFailed) return;
@@ -456,14 +450,12 @@ function resetFileOrganizationTemplates() {
     const defaults = {
         album: '$albumartist/$albumartist - $album/$track - $title',
         single: '$artist/$artist - $title/$title',
-        playlist: '$playlist/$artist - $title',
-        video: '$artist/$title-video'
+        playlist: '$playlist/$artist - $title'
     };
 
     document.getElementById('template-album-path').value = defaults.album;
     document.getElementById('template-single-path').value = defaults.single;
     document.getElementById('template-playlist-path').value = defaults.playlist;
-    document.getElementById('template-video-path').value = defaults.video;
 
     debouncedAutoSaveSettings();
 }
@@ -475,8 +467,7 @@ function validateFileOrganizationTemplates() {
     const validVars = {
         album: ['$artist', '$albumartist', '$artistletter', '$album', '$albumtype', '$title', '$track', '$disc', '$discnum', '$cdnum', '$year', '$quality'],
         single: ['$artist', '$albumartist', '$artistletter', '$album', '$albumtype', '$title', '$track', '$year', '$quality'],
-        playlist: ['$artist', '$artistletter', '$playlist', '$title', '$year', '$quality'],
-        video: ['$artist', '$artistletter', '$title', '$year']
+        playlist: ['$artist', '$artistletter', '$playlist', '$title', '$year', '$quality']
     };
 
     // Get template values
@@ -1391,9 +1382,6 @@ async function loadSettingsData() {
 
         // Set active server and toggle visibility
         const activeServer = settings.active_media_server || 'plex';
-        // Remember the persisted music server so a save from the VIDEO side keeps
-        // it unchanged (the toggle there is for opening a config panel, not picking
-        // the music server).
         window._persistedActiveServer = activeServer;
         toggleServer(activeServer);
 
@@ -1514,7 +1502,6 @@ async function loadSettingsData() {
         if (minFree) minFree.value = settings.soulseek?.min_free_disk_gb ?? 5;
         applyPathsEnvironment(settings);
         document.getElementById('staging-path').value = settings.import?.staging_path || './Staging';
-        document.getElementById('music-videos-path').value = settings.library?.music_videos_path || './MusicVideos';
         document.getElementById('playlists-materialize-path').value = settings.playlists?.materialize_path || './Playlists';
         document.getElementById('playlists-materialize-mode').value = settings.playlists?.materialize_mode || 'symlink';
 
@@ -1679,7 +1666,6 @@ async function loadSettingsData() {
         }
         document.getElementById('template-playlist-path').value = settings.file_organization?.templates?.playlist_path || '$playlist/$artist - $title';
         document.getElementById('template-playlist-item').value = settings.file_organization?.templates?.playlist_item || '';
-        document.getElementById('template-video-path').value = settings.file_organization?.templates?.video_path || '$artist/$title-video';
         document.getElementById('disc-label').value = settings.file_organization?.disc_label || 'Disc';
         document.getElementById('collab-artist-mode').value = settings.file_organization?.collab_artist_mode || 'first';
         document.getElementById('artistletter-symbol-fallback').checked = settings.file_organization?.artistletter_symbol_fallback === true;
@@ -2309,11 +2295,9 @@ function updateDownloadSourceUI() {
 
     // Indexers & Downloaders: torrent/usenet setup (Prowlarr + the Torrent and
     // Usenet client tiles) is shared config — keep it always reachable on the
-    // Downloads tab for BOTH the music and video sides, like the Advanced /
-    // Appearance tabs. (It used to be gated on an active torrent/usenet source,
-    // which hid it from anyone whose source was something else — and from the video
-    // side entirely, whose source lives on a separate dropdown.) Only tab-gated so
-    // it never leaks onto another tab.
+    // Downloads tab, like the Advanced / Appearance tabs. (It used to be gated
+    // on an active torrent/usenet source, which hid it from anyone whose source
+    // was something else.) Only tab-gated so it never leaks onto another tab.
     const onDownloadsTab = document.querySelector('.stg-tab.active')?.dataset.tab === 'downloads';
     const indSection = document.getElementById('indexers-downloaders-section');
     if (indSection) indSection.style.display = onDownloadsTab ? '' : 'none';
@@ -4321,14 +4305,6 @@ async function saveSettings(quiet = false) {
     } else if (document.getElementById('soulsync-toggle')?.classList.contains('active')) {
         activeServer = 'soulsync';
     }
-    // ISOLATION: this page is reused on the video side. Connection details (Plex/
-    // Jellyfin creds) ARE shared and save fine — but the video side must NEVER
-    // change the MUSIC active server. So when saving from the video side, keep
-    // active_media_server exactly as it was persisted (the toggle there only opens
-    // a config panel; it does not pick the music server).
-    if (document.body.getAttribute('data-side') === 'video' && window._persistedActiveServer) {
-        activeServer = window._persistedActiveServer;
-    }
 
     const metadataSourceSelect = document.getElementById('metadata-fallback-source');
     const discogsTokenInput = document.getElementById('discogs-token');
@@ -4589,7 +4565,6 @@ async function saveSettings(quiet = false) {
                 single_path: document.getElementById('template-single-path').value,
                 playlist_path: document.getElementById('template-playlist-path').value,
                 playlist_item: document.getElementById('template-playlist-item').value,
-                video_path: document.getElementById('template-video-path').value
             }
         },
         wishlist: {
@@ -4621,7 +4596,6 @@ async function saveSettings(quiet = false) {
         },
         library: {
             music_paths: collectMusicPaths(),
-            music_videos_path: document.getElementById('music-videos-path').value || './MusicVideos',
             reorganize_preserve_casing: document.getElementById('reorganize-preserve-casing')?.checked !== false
         },
         import: {
@@ -6196,7 +6170,6 @@ const PATH_INPUT_IDS = {
     download: 'download-path',
     transfer: 'transfer-path',
     staging: 'staging-path',
-    'music-videos': 'music-videos-path',
     'playlists-materialize': 'playlists-materialize-path',
     'm3u-entry-base': 'm3u-entry-base-path'
 };

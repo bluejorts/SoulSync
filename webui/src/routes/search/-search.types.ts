@@ -17,7 +17,6 @@ export const SOURCE_ORDER = [
   'musicbrainz',
   'jiosaavn',
   'bandcamp',
-  'youtube_videos',
   'soulseek',
 ] as const;
 
@@ -42,7 +41,6 @@ export const ALWAYS_CONFIGURED_SOURCES: ReadonlySet<string> = new Set([
   'musicbrainz',
   'jiosaavn',
   'bandcamp',
-  'youtube_videos',
 ]);
 
 export interface SourceLabel {
@@ -123,12 +121,6 @@ export const SOURCE_LABELS: Record<string, SourceLabel> = {
     tabClass: 'enh-tab-bandcamp',
     badgeClass: 'enh-badge-bandcamp',
   },
-  youtube_videos: {
-    text: 'Music Videos',
-    icon: '🎬',
-    tabClass: 'enh-tab-youtube',
-    badgeClass: 'enh-badge-youtube',
-  },
   soulseek: {
     // Routes through /api/search (raw slskd file results) — called "Basic
     // Search" in the UI since before the source picker existed.
@@ -200,22 +192,6 @@ export interface SearchLabel {
   area?: string;
 }
 
-export interface SearchVideo {
-  video_id?: string;
-  title?: string;
-  channel?: string;
-  thumbnail?: string;
-  /** SECONDS, not milliseconds — see formatVideoDuration. */
-  duration?: number;
-  view_count?: number;
-  /**
-   * The watch URL. Not decoration: the download POST sends
-   * {video_id, url, title, channel} (downloads.js:5463), so dropping this field
-   * from the type means the request goes out with `url: undefined`.
-   */
-  url?: string;
-  upload_date?: string;
-}
 
 /** One source's slice of results, as cached per (query, source). */
 export interface SourceResults {
@@ -223,7 +199,6 @@ export interface SourceResults {
   artists: SearchArtist[];
   albums: SearchAlbum[];
   tracks: SearchTrack[];
-  videos: SearchVideo[];
 }
 
 export interface EnhancedSearchResponse {

@@ -245,35 +245,6 @@ describe('useSearchController', () => {
     expect(seen).toEqual([]);
   });
 
-  it('fills the video grid progressively from the NDJSON stream', async () => {
-    const encoder = new TextEncoder();
-    const lines = [
-      '{"type":"videos","data":[{"video_id":"v1"}]}\n',
-      '{"type":"videos","data":[{"video_id":"v2"}]}\n',
-    ];
-    let i = 0;
-    server.use(
-      http.post('/api/enhanced-search/source/youtube_videos', () => {
-        i = 0;
-        return new Response(
-          new ReadableStream({
-            pull(controller) {
-              if (i < lines.length) controller.enqueue(encoder.encode(lines[i++]));
-              else controller.close();
-            },
-          }),
-          { status: 200 },
-        );
-      }),
-    );
-
-    const { result } = renderHook(() => useSearchController());
-    act(() => result.current.setActiveSource('youtube_videos'));
-    act(() => result.current.submitQuery('aphex'));
-
-    await waitFor(() => expect(activeResults(result.current.state).videos).toHaveLength(2));
-  });
-
   it('adopts the resolved source when an id lookup seeds it', () => {
     // Replaces the vanilla's reach-in state mutation with an explicit seam.
     const { result } = renderHook(() => useSearchController());

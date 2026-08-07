@@ -13,7 +13,6 @@ import {
   fallbackBannerText,
   fallbackFor,
   formatDuration,
-  formatVideoDuration,
   formatViewCount,
   hasAnyResults,
   isIdLookupQuery,
@@ -236,32 +235,6 @@ describe('formatDuration', () => {
   });
 });
 
-describe('formatVideoDuration', () => {
-  it('reads its input as SECONDS', () => {
-    // The same 3:35 as formatDuration(215_000) — the units are the only
-    // difference between the two functions, and the reason there are two.
-    expect(formatVideoDuration(215)).toBe('3:35');
-    expect(formatVideoDuration(65)).toBe('1:05');
-    expect(formatVideoDuration(600)).toBe('10:00');
-  });
-
-  it('does not roll over into hours', () => {
-    // The vanilla printed 90:00 for a 90-minute upload rather than 1:30:00;
-    // kept, because a music-video grid effectively never sees one.
-    expect(formatVideoDuration(5400)).toBe('90:00');
-  });
-
-  it('floors a fractional duration instead of printing a decimal', () => {
-    expect(formatVideoDuration(59.7)).toBe('0:59');
-  });
-
-  it('is empty when there is no duration', () => {
-    expect(formatVideoDuration(0)).toBe('');
-    expect(formatVideoDuration(undefined)).toBe('');
-    expect(formatVideoDuration(-5)).toBe('');
-  });
-});
-
 describe('meta lines', () => {
   it('labels an artist by which section it is in, not by a count', () => {
     // A count is tempting and wrong: _build_db_artists sends only id, name and
@@ -308,7 +281,6 @@ describe('response unpacking', () => {
     expect(results.artists).toHaveLength(1);
     expect(results.albums).toHaveLength(1);
     expect(results.tracks).toHaveLength(1);
-    expect(results.videos).toEqual([]);
   });
 
   it('gives every list a value, so no consumer reads undefined', () => {
@@ -317,12 +289,6 @@ describe('response unpacking', () => {
 });
 
 describe('hasAnyResults', () => {
-  it('counts videos, so a video-only search is not empty', () => {
-    const results = emptySourceResults();
-    results.videos = [{ video_id: 'v1' }];
-    expect(hasAnyResults(results)).toBe(true);
-  });
-
   it('is false only when every list is empty', () => {
     expect(hasAnyResults(emptySourceResults())).toBe(false);
   });

@@ -41,7 +41,7 @@ describe('automation icons match the vanilla map', () => {
 
   it('carries a real number of icons, so an empty parse cannot pass', () => {
     // Both sides being {} would satisfy the equality assertions above.
-    expect(Object.keys(AUTOMATION_ICONS).length).toBeGreaterThan(80);
+    expect(Object.keys(AUTOMATION_ICONS).length).toBeGreaterThan(40);
   });
 });
 

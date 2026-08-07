@@ -83,64 +83,18 @@ def test_event_triggers_with_conditions_have_condition_fields():
             assert len(t['condition_fields']) > 0
 
 
-# ── scope filtering (music vs the isolated video builder) ────────────────
+# ── scope filtering ───────────────────────────────────────────────────────
 
-def test_video_only_block_hidden_from_music_builder():
-    """The video action must never appear on the music builder."""
-    music = blocks.blocks_for_scope('music')
-    assert 'video_scan_library' not in {a['type'] for a in music['actions']}
-
-
-def test_video_builder_gets_video_block_plus_generics():
-    video = blocks.blocks_for_scope('video')
-    action_types = {a['type'] for a in video['actions']}
-    # its own action…
-    assert 'video_scan_library' in action_types
-    # …plus the generic (scope='both') ones it shares with music…
-    assert 'notify_only' in action_types
-    assert 'run_script' in action_types
-    # …but NOT music-only actions.
-    assert 'process_wishlist' not in action_types
-    assert 'scan_library' not in action_types
+def test_no_video_blocks_exist():
+    """The music fork carries no video-scoped blocks at all."""
+    for key in ('TRIGGERS', 'ACTIONS', 'NOTIFICATIONS'):
+        assert not [b for b in getattr(blocks, key) if b.get('scope') == 'video']
+        assert not [b for b in getattr(blocks, key) if str(b['type']).startswith('video_')]
 
 
-def test_generic_blocks_appear_on_both_sides():
-    """Every scope='both' block shows on music AND video."""
-    music = blocks.blocks_for_scope('music')
-    video = blocks.blocks_for_scope('video')
-    for key in ('triggers', 'actions', 'notifications'):
-        both = {b['type'] for b in getattr(blocks, key.upper()) if b.get('scope') == 'both'}
-        assert both, f"expected at least one scope='both' {key}"
-        assert both <= {b['type'] for b in music[key]}, f"music missing a 'both' {key}"
-        assert both <= {b['type'] for b in video[key]}, f"video missing a 'both' {key}"
-
-
-def test_music_scope_matches_legacy_full_lists_minus_video():
-    """scope='music' must reproduce the pre-scope behaviour: everything that
-    isn't explicitly video-only. Guards against accidentally hiding a music
-    block when new scope tags are added."""
+def test_music_scope_matches_full_lists():
+    """scope='music' returns every block (nothing is video-scoped anymore)."""
     music = blocks.blocks_for_scope('music')
     for key in ('triggers', 'actions', 'notifications'):
-        expected = {b['type'] for b in getattr(blocks, key.upper()) if b.get('scope') != 'video'}
+        expected = {b['type'] for b in getattr(blocks, key.upper())}
         assert {b['type'] for b in music[key]} == expected
-
-
-def test_post_download_chain_blocks_are_video_scoped():
-    music = blocks.blocks_for_scope('music')
-    video = blocks.blocks_for_scope('video')
-    trig = {t['type'] for t in video['triggers']}
-    act = {a['type'] for a in video['actions']}
-    assert {'video_batch_complete', 'video_library_scan_completed'} <= trig
-    assert {'video_scan_server', 'video_update_database'} <= act
-    mtrig = {t['type'] for t in music['triggers']}
-    mact = {a['type'] for a in music['actions']}
-    assert not ({'video_batch_complete', 'video_library_scan_completed'} & mtrig)
-    assert not ({'video_scan_server', 'video_update_database'} & mact)
-
-
-def test_video_scan_library_block_shape():
-    action = next(a for a in blocks.ACTIONS if a['type'] == 'video_scan_library')
-    assert action['scope'] == 'video'
-    mode = next(f for f in action['config_fields'] if f['key'] == 'mode')
-    assert {o['value'] for o in mode['options']} == {'full', 'incremental', 'deep'}
-    assert mode['default'] == 'full'

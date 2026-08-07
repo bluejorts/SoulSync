@@ -1,13 +1,12 @@
 """Config export/import bundle (Kazimir's migration "checkout" menu).
 
-One JSON bundle for both sides. Secrets redacted by default; a redacted
+One JSON bundle. Secrets redacted by default; a redacted
 bundle imported back never blanks existing credentials (the config_manager
 guard skips the mask). Non-bundles are rejected.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -66,44 +65,23 @@ class _CM:
         return n
 
 
-class _VDB:
-    def __init__(self):
-        self.store = {"quality_profiles": '{"0":{}}', "organization": '{"x":1}',
-                      "studio_network_links_seeded": "1"}
-
-    def all_video_settings(self, exclude=frozenset()):
-        return {k: (json.loads(v) if isinstance(v, str) else v)
-                for k, v in self.store.items() if k not in exclude}
-
-    def replace_video_settings(self, s):
-        for k, v in s.items():
-            self.store[k] = v if isinstance(v, str) else json.dumps(v)
-        return len(s)
-
-
 def test_redacted_export_masks_secrets():
-    b = build_bundle(_CM(), _VDB(), include_secrets=False, exported_at="T")
+    b = build_bundle(_CM(), include_secrets=False, exported_at="T")
     assert b[BUNDLE_MARKER] is True and b["includes_secrets"] is False
     assert b["music"]["spotify"]["client_id"] == "__redacted_unchanged__"
     assert b["music"]["plex"]["base_url"] == "http://plex"    # non-secret kept
 
 
 def test_full_export_embeds_real_secrets():
-    b = build_bundle(_CM(), _VDB(), include_secrets=True, exported_at="T")
+    b = build_bundle(_CM(), include_secrets=True, exported_at="T")
     assert b["includes_secrets"] is True
     assert b["music"]["spotify"]["client_secret"] == "SECRET"
 
 
-def test_export_excludes_internal_video_flags():
-    b = build_bundle(_CM(), _VDB(), include_secrets=False, exported_at="T")
-    assert "quality_profiles" in b["video"]
-    assert "studio_network_links_seeded" not in b["video"]     # one-time flag dropped
-
-
 def test_importing_a_redacted_bundle_never_blanks_secrets():
-    b = build_bundle(_CM(), _VDB(), include_secrets=False, exported_at="T")
+    b = build_bundle(_CM(), include_secrets=False, exported_at="T")
     target = _CM()
-    summary = apply_bundle(target, _VDB(), b)
+    summary = apply_bundle(target, b)
     assert summary["music_keys"] > 0
     # the redacted secret masks were skipped, real non-secrets applied
     assert "spotify.client_id" not in target.written
@@ -111,25 +89,17 @@ def test_importing_a_redacted_bundle_never_blanks_secrets():
 
 
 def test_full_bundle_imports_real_secrets():
-    b = build_bundle(_CM(), _VDB(), include_secrets=True, exported_at="T")
+    b = build_bundle(_CM(), include_secrets=True, exported_at="T")
     target = _CM()
-    apply_bundle(target, _VDB(), b)
+    apply_bundle(target, b)
     assert target.written.get("spotify.client_secret") == "SECRET"
-
-
-def test_video_settings_round_trip():
-    b = build_bundle(_CM(), _VDB(), include_secrets=True, exported_at="T")
-    vdb = _VDB()
-    vdb.store = {}
-    apply_bundle(_CM(), vdb, b)
-    assert json.loads(vdb.store["quality_profiles"]) == {"0": {}}
 
 
 @pytest.mark.parametrize("bad,reason_frag", [
     ("not a dict", "JSON object"),
     ({"random": "json"}, "isn't a SoulSync config export"),
-    ({BUNDLE_MARKER: True, "bundle_version": 99, "music": {}, "video": {}}, "newer SoulSync"),
-    ({BUNDLE_MARKER: True, "bundle_version": 1, "music": "x", "video": {}}, "missing its music"),
+    ({BUNDLE_MARKER: True, "bundle_version": 99, "music": {}}, "newer SoulSync"),
+    ({BUNDLE_MARKER: True, "bundle_version": 1, "music": "x"}, "missing its music"),
 ])
 def test_validate_rejects_bad_bundles(bad, reason_frag):
     ok, reason = validate_bundle(bad)
@@ -138,7 +108,7 @@ def test_validate_rejects_bad_bundles(bad, reason_frag):
 
 def test_apply_rejects_a_non_bundle():
     with pytest.raises(ValueError):
-        apply_bundle(_CM(), _VDB(), {"random": "json"})
+        apply_bundle(_CM(), {"random": "json"})
 
 
 # ── wiring contracts ──────────────────────────────────────────────────────────

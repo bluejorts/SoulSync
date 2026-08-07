@@ -1,7 +1,7 @@
 """Live server activity — a Tautulli-style view of what's playing on the server.
 
-App-wide (music AND video): Plex's ``sessions()`` returns every active stream
-regardless of library type, so one connection powers the whole live view. The
+Plex's ``sessions()`` returns every active stream, so one connection powers
+the whole live view. The
 normalization (raw plexapi session objects → a clean JSON payload) is pure and
 defensive — plexapi attributes vary by media type and version, so every access
 is guarded and a weird session degrades gracefully instead of blanking the view.
@@ -39,22 +39,13 @@ def _first(seq: Any) -> Any:
 
 
 def _plex_config(db=None) -> Dict[str, str]:
-    """Any working Plex connection config — the music config first (SoulSync's
-    origin), then the video side's effective creds. Both usually point at the
-    same server, and sessions() returns everything, so either works."""
+    """The working Plex connection config, or empty when not configured."""
     try:
         from config.settings import config_manager
         cfg = config_manager.get_plex_config() or {}
         if cfg.get("base_url") and cfg.get("token"):
             return {"base_url": cfg["base_url"], "token": cfg["token"]}
-    except Exception:   # noqa: BLE001, S110 - music config missing is normal
-        pass
-    try:
-        from core.video.sources import video_plex_config
-        cfg = video_plex_config(db)
-        if cfg.get("base_url") and cfg.get("token"):
-            return {"base_url": cfg["base_url"], "token": cfg["token"]}
-    except Exception:   # noqa: BLE001, S110 - no config at all is a valid state
+    except Exception:   # noqa: BLE001, S110 - missing config is a valid state
         pass
     return {"base_url": "", "token": ""}
 
@@ -221,17 +212,10 @@ def normalize_session(item: Any) -> Dict[str, Any]:
 # ── Jellyfin activity (best-effort; UNVERIFIED against a live Jellyfin) ───────
 
 def _jellyfin_config(db=None) -> Dict[str, str]:
-    """Any working Jellyfin config — music first, then video's effective creds."""
+    """The working Jellyfin config, or empty when not configured."""
     try:
         from config.settings import config_manager
         cfg = config_manager.get_jellyfin_config() or {}
-        if cfg.get("base_url") and cfg.get("api_key"):
-            return {"base_url": cfg["base_url"], "api_key": cfg["api_key"]}
-    except Exception:   # noqa: BLE001, S110
-        pass
-    try:
-        from core.video.sources import video_jellyfin_config
-        cfg = video_jellyfin_config(db)
         if cfg.get("base_url") and cfg.get("api_key"):
             return {"base_url": cfg["base_url"], "api_key": cfg["api_key"]}
     except Exception:   # noqa: BLE001, S110
@@ -343,56 +327,8 @@ def _summarize(sessions: List[Dict[str, Any]], server_name: str, version: str) -
 
 
 def _resolve_library_links(sessions: List[Dict[str, Any]], db=None) -> None:
-    """Attach a ``link`` = {kind, id, source:'library'} to each session whose
-    media is in the SoulSync video library, so a click opens THAT movie/show
-    page. One DB query maps native server ids (Plex ratingKey / Jellyfin id)
-    back to our rows. Best-effort — a miss just leaves the card non-clickable."""
-    db_obj = None
-    try:
-        from api.video import get_video_db
-        db_obj = get_video_db()
-    except Exception:   # noqa: BLE001 - no video library → no links
-        logger.debug("library link resolve: no video db", exc_info=True)
-
-    if db_obj is not None:
-        # Pass 1 — exact native server id (Plex ratingKey / Jellyfin id).
-        ids = [s.get("_link_sid") for s in sessions if s.get("_link_sid")]
-        by_sid = {}
-        if ids:
-            try:
-                for r in db_obj.items_by_server_ids(ids):
-                    by_sid.setdefault(str(r["server_id"]), r)
-            except Exception:   # noqa: BLE001
-                logger.debug("items_by_server_ids failed", exc_info=True)
-        for s in sessions:
-            want = "movie" if s["media_type"] == "movie" else ("show" if s["media_type"] == "episode" else None)
-            if not want:
-                continue
-            r = by_sid.get(str(s.get("_link_sid") or ""))
-            if r and r["kind"] == want:
-                s["link"] = {"kind": r["kind"], "id": r["id"], "source": "library"}
-                continue
-            # Pass 2 — title (+ year for movies) fallback, for when the id doesn't
-            # line up (a re-scan, a different server_source) but you DO own it.
-            title = s.get("_link_title")
-            if title:
-                try:
-                    rid = db_obj.find_library_ref_by_title(want, title, s.get("_link_year"))
-                except Exception:   # noqa: BLE001
-                    rid = None
-                if rid:
-                    s["link"] = {"kind": want, "id": rid, "source": "library"}
-
-    # Pass 3 — NOT in the library: link to the TMDB-backed page (the same preview
-    # the search opens for un-owned titles) so anything on the server is clickable.
-    for s in sessions:
-        if s.get("link"):
-            continue
-        want = "movie" if s["media_type"] == "movie" else ("show" if s["media_type"] == "episode" else None)
-        tmdb = s.get("_link_tmdb")
-        if want and tmdb:
-            s["link"] = {"kind": want, "id": tmdb, "source": "tmdb"}
-
+    """Strip the internal ``_link_*`` scratch fields. Cards are not clickable —
+    there is no library detail page for non-music media."""
     for s in sessions:
         for k in ("_link_sid", "_link_title", "_link_year", "_link_tmdb"):
             s.pop(k, None)
