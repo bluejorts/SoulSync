@@ -3246,9 +3246,6 @@ async function loadPageData(pageId) {
             case 'automations':
                 await loadAutomations();
                 break;
-            case 'help':
-                initializeDocsPage();
-                break;
         }
     } catch (error) {
         console.error(`Error loading ${pageId} data:`, error);

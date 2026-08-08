@@ -47,7 +47,7 @@ export const shellRouteManifest: readonly ShellRouteDefinition[] = [
   { pageId: 'stats', path: '/stats', kind: 'react' },
   { pageId: 'settings', path: '/settings', kind: 'legacy' },
   { pageId: 'issues', path: '/issues', kind: 'react' },
-  { pageId: 'help', path: '/help', kind: 'legacy' },
+  { pageId: 'help', path: '/help', kind: 'react' },
   { pageId: 'hydrabase', path: '/hydrabase', kind: 'legacy' },
 ] as const;
 
