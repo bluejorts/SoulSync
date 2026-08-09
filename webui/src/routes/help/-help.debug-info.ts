@@ -50,8 +50,6 @@ export interface DebugInfoResponse {
     transfer_folder_writable?: boolean;
     staging_folder?: string;
     staging_folder_exists?: boolean;
-    music_videos_path?: string;
-    music_videos_path_exists?: boolean;
     music_library_paths?: PathEntry[];
   };
   config?: {
@@ -132,9 +130,6 @@ export function buildDebugInfoText(data: DebugInfoResponse): string {
   text += `Input:    ${data.paths?.download_path || '(not set)'} [${pathStatus(data.paths?.download_path_exists, data.paths?.download_path_writable)}]\n`;
   text += `Output:   ${data.paths?.transfer_folder || '(not set)'} [${pathStatus(data.paths?.transfer_folder_exists, data.paths?.transfer_folder_writable)}]\n`;
   text += `Import:   ${data.paths?.staging_folder ? data.paths.staging_folder + ' [' + (data.paths.staging_folder_exists ? ck + ' ok' : ex + ' missing') + ']' : '(not configured — optional)'}\n`;
-  if (data.paths?.music_videos_path) {
-    text += `Videos:   ${data.paths.music_videos_path} [${data.paths.music_videos_path_exists ? ck + ' ok' : ex + ' missing'}]\n`;
-  }
   if (data.paths?.music_library_paths?.length) {
     text += `Library Paths:\n`;
     data.paths.music_library_paths.forEach((p) => {

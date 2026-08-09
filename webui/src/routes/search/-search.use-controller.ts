@@ -3,11 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { IdLookupResponse } from './-search.api';
 import type { SearchSource, SourceResults } from './-search.types';
 
-import {
-  fetchConfigStatus,
-  fetchEnhancedSearch,
-  fetchMetadataStatus,
-} from './-search.api';
+import { fetchConfigStatus, fetchEnhancedSearch, fetchMetadataStatus } from './-search.api';
 import {
   canSelectSource,
   emptySourceResults,

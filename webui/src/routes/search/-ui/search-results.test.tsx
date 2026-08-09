@@ -383,5 +383,4 @@ describe('SearchResults', () => {
     expect(document.querySelector('.enh-artists-wrapper')).not.toBeNull();
     expect(document.getElementById('enh-db-artists-section')).toBeNull();
   });
-
 });

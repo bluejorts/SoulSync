@@ -192,7 +192,6 @@ export interface SearchLabel {
   area?: string;
 }
 
-
 /** One source's slice of results, as cached per (query, source). */
 export interface SourceResults {
   db_artists: SearchArtist[];

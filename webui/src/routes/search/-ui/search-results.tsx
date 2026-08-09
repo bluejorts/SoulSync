@@ -318,7 +318,6 @@ export function SearchResults({
           />
         ))}
       </ResultSection>
-
     </>
   );
 }
